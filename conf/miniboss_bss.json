@@ -1,0 +1,94 @@
+{
+  "jdbc": {
+    "url": "jdbc:oracle:thin:@//172.31.1.242:1521/cc",
+    "user": "BI_BSS",
+    "password": "salam$2030",
+    "driver": "oracle.jdbc.OracleDriver",
+    "fetchsize": 10000,
+    "default_num_partitions": 8
+  },
+  "runtime": {
+    "timezone": "Asia/Kolkata",
+    "max_parallel_tables": 4,
+
+    "raw_root": "hdfs:///datalake/miniboss_oss/raw",
+    "final_root": "hdfs:///datalake/miniboss_oss/final",
+    "append_table_schema": false,
+
+    "write_format": "parquet",
+    "compression": "snappy",
+
+    "finalize_full_refresh": true,
+    "finalize_strategy": "copy_and_swap_final",
+    "hive": { "enabled": true, "db": "miniboss-alpha" },
+
+    "state_backend": "singlestore",
+    "state": {
+      "hdfs": { "dir": "hdfs:///datalake/_ingestion_state" },
+      "singlestore": {
+        "ddlEndpoint": "172.31.137.151:3306",
+        "user": "informatica",
+        "password": "infass!123",
+        "database": "monitoring2",
+        "eventsTable": "control_etl_events",
+        "watermarksTable": "control_watermarks",
+        "sourceId": "miniboss-bss-datalake"
+      }
+    },
+    "intermediate": {
+      "enabled": true,
+      "type": "iceberg", 
+      "_type_options": "iceberg | parquet",
+      "catalog": "ice", 
+      "db": "staging", 
+      "warehouse": "hdfs:///datalake/miniboss_oss/intermediate/iceberg"
+    },
+    "final_parquet_mirror": {
+      "enabled": true,
+      "root": "hdfs:///datalake/miniboss_oss/final_parquet",
+      "partition_col": "load_date"
+    },
+    "hive_reg": {
+      "doc": "Used for SCD1 Final",
+      "enabled": true,
+      "db": "miniboss_dl_oss",
+      "partition_col": "load_date",
+      "use_msck": false
+    }
+  },
+  "tables": [
+    {
+      "schema": "cvbs",
+      "table": "subs",
+      "mode": "scd1",
+      "primary_keys": ["SUBS_ID"],
+      "incremental_column": "UPDATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "subs_event",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "acct_book",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "prod_state",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "payment_type",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "party_type",
+      "mode": "full"
+    }
+  ]
+}

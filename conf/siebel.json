@@ -1,0 +1,76 @@
+{
+  "jdbc": {
+    "url": "jdbc:oracle:thin:@//PRSIBDBPscan:1525/SIBDB",
+    "user": "ISCC_BIGDATA",
+    "password": "Prod#321",
+    "driver": "oracle.jdbc.OracleDriver",
+    "fetchsize": 10000,
+    "default_num_partitions": 8
+  },
+  "runtime": {
+    "timezone": "Asia/Kolkata",
+    "max_parallel_tables": 4,
+
+    "raw_root": "hdfs:///datalake/raw/oracle",
+    "final_root": "hdfs:///datalake/final/oracle",
+    "append_table_schema": false,
+
+    "write_format": "parquet",
+    "compression": "snappy",
+
+    "finalize_full_refresh": true,
+    "finalize_strategy": "copy_and_swap_final",
+    "hive": { "enabled": true, "db": "bronze" },
+
+    "state_backend": "singlestore",
+    "state": {
+      "hdfs": { "dir": "hdfs:///datalake/_ingestion_state" },
+      "singlestore": {
+        "ddlEndpoint": "172.31.137.151:3306",
+        "user": "informatica",
+        "password": "infass!123",
+        "database": "monitoring2",
+        "eventsTable": "control_etl_events",
+        "watermarksTable": "control_watermarks",
+        "sourceId": "siebel-datalake"
+      }
+    }
+  },
+  "tables": [
+    {
+      "schema": "siebel",
+      "table": "s_contact",
+      "mode": "full"
+    },
+    {
+      "schema": "siebel",
+      "table": "s_user",
+      "mode": "full"
+    },
+    {
+      "schema": "siebel",
+      "table": "s_prod_int",
+      "mode": "full"
+    },
+    {
+      "schema": "siebel",
+      "table": "s_prod_ln",
+      "mode": "full"
+    },
+    {
+      "schema": "siebel",
+      "table": "s_postn",
+      "mode": "full"
+    },
+    {
+      "schema": "siebel",
+      "table": "s_org_ext",
+      "mode": "full"
+    },
+    {
+      "schema": "siebel",
+      "table": "s_asset",
+      "mode": "full"
+    }
+  ]
+}

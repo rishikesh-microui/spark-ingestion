@@ -1,0 +1,50 @@
+{
+  "jdbc": {
+    "url": "jdbc:oracle:thin:@//172.31.1.244:1523/oss",
+    "user": "BI_OSS",
+    "password": "salam$2030",
+    "driver": "oracle.jdbc.OracleDriver",
+    "fetchsize": 10000,
+    "default_num_partitions": 8
+  },
+  "runtime": {
+    "timezone": "Asia/Kolkata",
+    "max_parallel_tables": 4,
+
+    "raw_root":   "hdfs:///datalake/raw/miniboss_oss",
+    "final_root": "hdfs:///datalake/final/miniboss_oss",
+
+    "write_format": "parquet",
+    "compression": "snappy",
+
+    "finalize_full_refresh": true,
+    "finalize_strategy": "copy_and_swap_final",
+    "hive": { "enabled": true, "db": "bronze" },
+
+    "state_backend": "singlestore",
+    "state": {
+      "hdfs": { "dir": "hdfs:///datalake/_ingestion_state" },
+      "singlestore": {
+        "ddlEndpoint": "172.31.137.151:3306",
+        "user": "informatica",
+        "password": "infass!123",
+        "database": "monitoring2",
+        "eventsTable": "control_etl_events",
+        "watermarksTable": "control_watermarks",
+        "sourceId": "miniboss-oss-datalake"
+      }
+    }
+  },
+  "tables": [
+    {
+      "schema": "itcftth",
+      "table": "srv_cfs_attr",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_ord",
+      "mode": "full"
+    }
+  ]
+}
