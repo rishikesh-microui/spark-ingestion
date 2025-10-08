@@ -5,21 +5,23 @@
     "password": "salam$2030",
     "driver": "oracle.jdbc.OracleDriver",
     "fetchsize": 10000,
+    "dialect": "oracle",
     "default_num_partitions": 8
   },
   "runtime": {
-    "timezone": "Asia/Kolkata",
-    "max_parallel_tables": 4,
-
-    "raw_root":   "hdfs:///datalake/raw/miniboss_oss",
+    "job_name": "miniboss_oss",
+    "dynamicAllocation": false,
+    "initialExecutors": 2,
+    "raw_root": "hdfs:///datalake/raw/miniboss_oss",
     "final_root": "hdfs:///datalake/final/miniboss_oss",
-
+    "timezone": "Asia/Kolkata",
+    "append_table_schema": false,
+    "max_parallel_tables": 4,
     "write_format": "parquet",
     "compression": "snappy",
-
     "finalize_full_refresh": true,
     "finalize_strategy": "copy_and_swap_final",
-    "hive": { "enabled": true, "db": "bronze" },
+    "hive": { "enabled": true, "db": "miniboss_dl_oss" },
 
     "state_backend": "singlestore",
     "state": {
@@ -33,18 +35,368 @@
         "watermarksTable": "control_watermarks",
         "sourceId": "miniboss-oss-datalake"
       }
-    }
+    },
+    "intermediate": {
+      "enabled": true,
+      "type": "iceberg",
+      "_type_options": "iceberg | parquet",
+      "catalog": "ice",
+      "db": "staging",
+      "warehouse": "hdfs:///datalake/miniboss_oss/intermediate/iceberg"
+    },
+    "final_parquet_mirror": {
+      "enabled": true,
+      "root": "hdfs:///datalake/miniboss_oss/final_parquet",
+      "partition_col": "load_date"
+    },
+    "hive_reg": {
+      "doc": "Used for SCD1 Final",
+      "enabled": true,
+      "db": "miniboss_dl_oss",
+      "partition_col": "load_date",
+      "use_msck": false
+    },
+    "log_file": "/home/informaticaadmin/etl_monitoring/miniboss_oss_ingest.log",
+    "state_flush_every": 50
   },
   "tables": [
     {
       "schema": "itcftth",
-      "table": "srv_cfs_attr",
+      "table": "om_ord",
       "mode": "full"
     },
     {
       "schema": "itcftth",
-      "table": "om_ord",
+      "table": "im_port_2_port",
       "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "im_port",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfs_ct_main",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "v_tls_last_day_order",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "bpm_process",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "bpm_process_his",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "im_link",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "bpm_process_instance_his",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "oa_itc_provider",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "epc_ord_ord",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "bpm_process_instance",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfs_ver_attr",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfs_ct_main_his",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "src_ems",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "wfs_team",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_rfs",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "epc_po_attr",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_disp_reason",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "epc_po",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfs_member",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_ord_track",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "bpm_activity_order",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "pv_batch_sp_re_detail_his",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_wo",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "wf_appointment_his",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "bpm_activity_instance",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "im_splt",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_rfs_member",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "bfm_area",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "wf_task_result",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_cfs_ord",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_ott_log",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfsver_ct_main",
+      "mode": "full"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_ord_his",
+      "mode": "scd1",
+      "primary_keys": ["ORD_NO"],
+      "incremental_column": "ARC_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfs_ver_attr",
+      "mode": "scd1",
+      "primary_keys": ["VER_ID", "ATTR_ID"],
+      "incremental_column": "CREATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_cfs_ord_his",
+      "mode": "scd1",
+      "primary_keys": ["ORD_NO"],
+      "incremental_column": "ARC_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_ord_dispatch_his",
+      "mode": "scd1",
+      "primary_keys": ["ORD_NO", "SEQ"],
+      "incremental_column": "ARC_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfs_ver_member",
+      "mode": "scd1",
+      "primary_keys": ["RFS_VERSION_ID", "VER_ID"],
+      "incremental_column": "CREATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "wf_task",
+      "mode": "scd1",
+      "primary_keys": ["TASK_ORDER_NO", "REQUEST_NO", "SEQ"],
+      "incremental_column": "CREATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "im_device",
+      "mode": "scd1",
+      "primary_keys": ["DEVICE_ID"],
+      "incremental_column": "MODIFY_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_ord_track_his",
+      "mode": "scd1",
+      "primary_keys": ["ORD_NO", "SEQ"],
+      "incremental_column": "ARC_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "im_circuit",
+      "mode": "scd1",
+      "primary_keys": ["CIRCUIT_ID"],
+      "incremental_column": "MODIFY_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "rpt_fttx_detail_past",
+      "mode": "scd1",
+      "primary_keys": ["CFS_ID_CA", "CFS_ID_CB", "first_install"],
+      "incremental_column": "LAST_UPDATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "epcs_spec",
+      "mode": "scd1",
+      "primary_keys": ["SPEC_ID"],
+      "incremental_column": "MODIFY_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_rfs_ver",
+      "mode": "scd1",
+      "primary_keys": ["VER_ID"],
+      "incremental_column": "MODIFY_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_wo_his",
+      "mode": "scd1",
+      "primary_keys": ["WO_NO"],
+      "incremental_column": "ARC_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "im_address",
+      "mode": "scd1",
+      "primary_keys": ["ADDRESS_ID"],
+      "incremental_column": "MODIFY_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itc_aaa",
+      "table": "aaa_accounting",
+      "mode": "scd1",
+      "primary_keys": ["ACCOUNT_ID"],
+      "incremental_column": "DATE_TIME",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_rfs_ver_member",
+      "mode": "scd1",
+      "primary_keys": ["MEMB_INST_ID"],
+      "incremental_column": "CREATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfs_attr_his",
+      "mode": "scd1",
+      "primary_keys": ["CFS_ID", "ATTR_ID", "LAST_VER"],
+      "incremental_column": "ARC_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfsver_ct_main",
+      "mode": "scd1",
+      "primary_keys": ["VER_ID"],
+      "incremental_column": "COMMIT_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "wf_appointment",
+      "mode": "scd1",
+      "primary_keys": ["APPOINT_NO"],
+      "incremental_column": "START_TIME",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "srv_cfs_attr",
+      "mode": "scd1",
+      "primary_keys": ["CFS_ID", "ATTR_ID"],
+      "incremental_column": "CREATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "itcftth",
+      "table": "om_ord_dispatch",
+      "mode": "scd1",
+      "primary_keys": ["ORD_NO"],
+      "incremental_column": "CREATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
     }
   ]
 }

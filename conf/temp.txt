@@ -1,0 +1,166 @@
+SELECT 
+BAN
+,accountName
+,spid
+,role
+,TYPE
+,groupType
+,systemType
+,state
+,registrationStatus
+,writtenOff
+,habeasData
+,promiseToPayDate
+,promiseToPayStartDate
+,currentNumPTPTransitions
+,ptpTermsTightened
+,vpnMSISDN
+,ownerMSISDN
+,parentBAN
+,responsibleBAN
+,firstName
+,lastName
+,accountMgr
+,debtCollectionAgencyId
+,lastModified
+,lastStateChangeDate
+,lastLoDGenerationDate
+,responsible
+,totalNumOfSubscriptions
+,vpn
+,icm
+,greeting
+,creditCategory
+,originalCreditCategory
+,dealerCode
+,discountClass
+,taxAuthority
+,TaxExemption
+,TEIC
+,language
+,currency
+,billCycleID
+,paymentPlan
+,paymentPlanAmount
+,paymentPlanStartDate
+,paymentPlanCurrCount
+,paymentPlanInstallmentsCharged
+,paymentPlanMonthlyAmount
+,billingMsgPreference
+,billingMessage
+,paymentMethodType
+,paymentMethod
+,CREDITCARDNUMBER
+,pMethodCardTypeId
+,expiryDate
+,holderName
+,debitBankTransit
+,pMethodBankID
+,debitAccountNumber
+,maxDebitAmount
+,subscriberSegment
+,billingAddress1
+,invoiceDeliveryOption
+,category
+,contactName
+,profileAttachmentKey
+,companyName
+,nextSubscriberId
+,inCollectionDate
+,bankID
+,contract
+,DATEADD(SECOND, CAST(contractStartDate AS BIGINT) / 1000 % 2147483647, DATEADD(SECOND, CAST(contractStartDate AS BIGINT) / 1000 / 2147483647 * 2147483647, '1970-01-01')) AS contractStartDate
+,DATEADD(SECOND, CAST(contractEndDate AS BIGINT) / 1000 % 2147483647,  DATEADD(SECOND, CAST(contractEndDate AS BIGINT) / 1000 / 2147483647 * 2147483647, '1970-01-01')) AS contractEndDate
+,useIfNoSubCreditInfo
+,createAccountReason
+,oldBAN
+,lastInvoiceDunnedDueDate
+FROM [bss-db].dbo.ACCOUNT]
+
+
+reader = (spark.read.format("jdbc")
+              .option("url", "jdbc:sqlserver://172.31.43.69:1433;databaseName=bss-db")
+              .option("query", "SELECT TOP 100 * FROM dbo.ACCOUNT")
+              .option("user", "BI_BIGDATA")
+              .option("password", "w1vZ168NoW5H")
+              .option("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver")
+              .option("trustServerCertificate", "true")
+              .load()
+              )
+
+
+              com.microsoft.sqlserver.jdbc.SQLServerException;
+url = "jdbc:sqlserver://172.31.43.69:1433;databaseName=bss-db;encrypt=true;trustServerCertificate=true"
+df1 = (spark.read.format("jdbc")
+      .option("url", "jdbc:sqlserver://mvno-reportp01:1433;databaseName=bss-db")
+      .option("trustServerCertificate", "true")
+      .option("dbtable", "dbo.ACCOUNT")
+      .option("user", "BI_BIGDATA")
+      .option("password", "w1vZ168NoW5H")
+      .option("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver")
+      .option("numPartitions", "1")
+      .load())
+df1.show()
+
+df1 = (spark.read.format("jdbc")
+      .option("url", "jdbc:sqlserver://172.31.43.69:1433;databaseName=bss-db")
+      .option("trustServerCertificate", "true")
+      .option("dbtable", "dbo.ACCOUNT")
+      .option("user", "BI_BIGDATA")
+      .option("password", "w1vZ168NoW5H")
+      .option("driver", "com.microsoft.sqlserver.jdbc.SQLServerDriver")
+      .option("numPartitions", "1")
+      .load())
+df1.show()
+
+df = (spark.read
+        .format("com.microsoft.sqlserver.jdbc.spark") 
+        .option("url", "jdbc:sqlserver://172.31.43.69:1433;databaseName=bss-db") 
+        .option("dbtable", "dbo.ACCOUNT") 
+        .option("user", "BI_BIGDATA") 
+        .option("password", "w1vZ168NoW5H")
+        .option("trustServerCertificate", "true")
+        .load()
+)
+
+pyspark3 --jars /home/informaticaadmin/jars/mssql-jdbc-13.2.0.jre8.jar --conf spark.driver.extraClassPath=/home/informaticaadmin/jars/mssql-jdbc-13.2.0.jre8.jar --conf spark.executor.userClassPathFirst=true --conf spark.yarn.user.classpath.first=true --conf spark.driver.userClassPathFirst=true --conf spark.scheduler.mode=FAIR --conf spark.executor.extraClassPath=./mssql-jdbc-13.2.0.jre8.jar
+
+
+pyspark3 --master local[2] --jars /home/informaticaadmin/jars/mssql-jdbc-13.2.0.jre8.jar --conf spark.driver.extraClassPath=/home/informaticaadmin/jars/mssql-jdbc-13.2.0.jre8.jar
+
+pyspark3 --master local[2] --jars /home/informaticaadmin/jars/mssql-jdbc-13.2.0.jre8.jar --conf spark.driver.extraClassPath=/home/informaticaadmin/jars/mssql-jdbc-13.2.0.jre8.jar 
+
+
+if __name__ == "__main__":
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--config", required=True)
+    args = parser.parse_args()
+
+    with open(args.config, "r") as f:
+        cfg = json.load(f)
+
+    spark = (
+        SparkSession.builder
+        .appName("oracle_ingest_to_raw_resilient")
+        .config("spark.dynamicAllocation.enabled", "true")
+        .config("spark.dynamicAllocation.initialExecutors", "1")
+        .config("spark.dynamicAllocation.maxExecutors", "2")
+        .config("spark.shuffle.service.enabled", "true")
+        .config("spark.sql.parquet.int96RebaseModeInWrite", "LEGACY")
+        .config("spark.executor.cores", "4")
+        .config("spark.executor.memory", "8g")
+        .config("spark.driver.memory", "6g")
+        .config("spark.jars", ",".join([
+            "/home/informaticaadmin/jars/singlestore-spark-connector_2.11-3.1.2-spark-2.4.7.jar",
+            "/home/informaticaadmin/jars/mariadb-java-client-2.7.11.jar",
+            "/home/informaticaadmin/jars/ojdbc8-12.2.0.1.jar"
+        ]))
+        .config("spark.scheduler.mode", "FAIR")
+        .config("spark.sql.sources.partitionOverwriteMode", "dynamic")
+        .config("spark.sql.session.timeZone", "Asia/Kolkata")
+        .enableHiveSupport()
+        .getOrCreate()
+    )
+    main(spark, cfg)
+    spark.stop()

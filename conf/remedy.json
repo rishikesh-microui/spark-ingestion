@@ -1,0 +1,106 @@
+{
+  "jdbc": {
+    "url": "jdbc:sqlserver://172.30.1.10:1433;databaseName=ARSystem",
+    "user": "ibreporting",
+    "password": "ibreporting$321",
+    "driver": "com.microsoft.sqlserver.jdbc.SQLServerDriver",
+    "fetchsize": 10000,
+    "dialect": "mssql",
+    "default_num_partitions": 8
+  },
+  "runtime": {
+    "job_name": "remedy_ingestion",
+    "dynamicAllocation": false,
+    "initialExecutors": 2,
+    "raw_root": "hdfs:///datalake/sparkingestion/remedy/raw",
+    "final_root": "hdfs:///datalake/sparkingestion/remedy/final",
+    "timezone": "Asia/Kolkata",
+    "append_table_schema": false,
+    "max_parallel_tables": 4,
+    "write_format": "parquet",
+    "compression": "snappy",
+    "finalize_full_refresh": true,
+    "finalize_strategy": "copy_and_swap_final",
+    "hive": { "enabled": true, "db": "remdey_dl_spark" },
+
+    "state_backend": "singlestore",
+    "state_flush": {
+    "max_events": 200,            
+    "max_age_seconds": 30,       
+    "check_interval_seconds": 5  
+    },
+    "state": {
+      "hdfs": { "dir": "hdfs:///datalake/_ingestion_state" },
+      "singlestore": {
+        "ddlEndpoint": "172.31.137.151:3306",
+        "user": "informatica",
+        "password": "infass!123",
+        "database": "monitoring2",
+        "eventsTable": "control_etl_events",
+        "watermarksTable": "control_watermarks",
+        "sourceId": "remedy-spark-datalake"
+      }
+    },
+    "intermediate": {
+      "enabled": true,
+      "type": "iceberg",
+      "_type_options": "iceberg | parquet",
+      "catalog": "ice",
+      "db": "staging",
+      "warehouse": "hdfs:///datalake/sparkingestion/remedy/intermediate/iceberg"
+    },
+    "final_parquet_mirror": {
+      "enabled": true,
+      "root": "hdfs:///datalake/sparkingestion/remedy/final_parquet",
+      "partition_col": "load_date"
+    },
+    "hive_reg": {
+      "doc": "Used for SCD1 Final",
+      "enabled": true,
+      "db": "remdey_dl_spark",
+      "partition_col": "load_date",
+      "use_msck": false
+    },
+    "extra_jars": [
+      "/home/informaticaadmin/jars/singlestore-spark-connector_2.12-4.1.10-spark-3.3.4.jar",
+      "/home/informaticaadmin/jars/mariadb-java-client-2.7.11.jar",
+      "/home/informaticaadmin/jars/ojdbc8-12.2.0.1.jar",
+      "/home/informaticaadmin/jars/spray-json_2.13-1.3.5.jar",
+      "/home/informaticaadmin/jars/singlestore-jdbc-client-1.1.8.jar",
+      "/home/informaticaadmin/jars/mssql-jdbc-13.2.0.jre8.jar",
+      "/home/informaticaadmin/jars/spark-mssql-connector_2.12-1.2.0.jar"
+    ],
+    "log_file": "/home/informaticaadmin/etl_monitoring/remedy_ingest.log",
+    "state_flush_every": 50
+  },
+
+  "tables": [
+    {
+      "schema": "dbo",
+      "table": "woi_workorder",
+      "mode": "scd1",
+      "primary_keys": ["request_id"],
+      "incremental_column": "last_modified_date",
+      "incr_col_type": "epoch_seconds", 
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "dbo",
+      "table": "hpd_help_desk",
+      "mode": "scd1",
+      "primary_keys": ["entry_id"],
+      "incremental_column": "last_modified_date",
+      "incr_col_type": "epoch_seconds", 
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "dbo",
+      "table": "a_itc_hpd_woi_capturetimeoftic",
+      "mode": "scd1",
+      "primary_keys": ["request_id"],
+      "incremental_column": "modified_date",
+      "incr_col_type": "epoch_seconds", 
+      "initial_watermark": "0"
+    }
+  ]
+}

@@ -5,24 +5,30 @@
     "password": "salam$2030",
     "driver": "oracle.jdbc.OracleDriver",
     "fetchsize": 10000,
+    "dialect": "oracle",
     "default_num_partitions": 8
   },
   "runtime": {
-    "timezone": "Asia/Kolkata",
-    "max_parallel_tables": 4,
-
+    "job_name": "miniboss_bss",
+    "dynamicAllocation": false,
+    "initialExecutors": 2,
     "raw_root": "hdfs:///datalake/miniboss_oss/raw",
     "final_root": "hdfs:///datalake/miniboss_oss/final",
+    "timezone": "Asia/Kolkata",
     "append_table_schema": false,
-
+    "max_parallel_tables": 4,
     "write_format": "parquet",
     "compression": "snappy",
-
     "finalize_full_refresh": true,
     "finalize_strategy": "copy_and_swap_final",
-    "hive": { "enabled": true, "db": "miniboss-alpha" },
+    "hive": { "enabled": true, "db": "miniboss_dl_bss" },
 
     "state_backend": "singlestore",
+    "state_flush": {
+    "max_events": 200,            
+    "max_age_seconds": 30,       
+    "check_interval_seconds": 5  
+    },
     "state": {
       "hdfs": { "dir": "hdfs:///datalake/_ingestion_state" },
       "singlestore": {
@@ -37,10 +43,10 @@
     },
     "intermediate": {
       "enabled": true,
-      "type": "iceberg", 
+      "type": "iceberg",
       "_type_options": "iceberg | parquet",
-      "catalog": "ice", 
-      "db": "staging", 
+      "catalog": "ice",
+      "db": "staging",
       "warehouse": "hdfs:///datalake/miniboss_oss/intermediate/iceberg"
     },
     "final_parquet_mirror": {
@@ -54,9 +60,246 @@
       "db": "miniboss_dl_oss",
       "partition_col": "load_date",
       "use_msck": false
-    }
+    },
+    "extra_jars": [
+      "/home/informaticaadmin/jars/singlestore-spark-connector_2.12-4.1.10-spark-3.3.4.jar",
+      "/home/informaticaadmin/jars/mariadb-java-client-2.7.11.jar",
+      "/home/informaticaadmin/jars/ojdbc8-12.2.0.1.jar",
+      "/home/informaticaadmin/jars/spray-json_2.13-1.3.5.jar",
+      "/home/informaticaadmin/jars/singlestore-jdbc-client-1.1.8.jar",
+      "/home/informaticaadmin/jars/mssql-jdbc-13.2.0.jre8.jar",
+      "/home/informaticaadmin/jars/spark-mssql-connector_2.12-1.2.0.jar"
+    ],
+    "log_file": "/home/informaticaadmin/etl_monitoring/miniboss_bss_ingest.log",
+    "state_flush_every": 50
   },
+
   "tables": [
+    {
+      "schema": "cvbs",
+      "table": "party_type",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "billing_cycle",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "subs_event",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "acct_item_type",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "billing_cycle_type",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "itc_crad_pay_his",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "ott_activation",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "indep_prod_spec",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "cert_type",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "party_type",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "dp",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "order_state",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "itc_package_price",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "prod_state",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "payment",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "cert",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "payment_type",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "bill",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "payment_method",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "itc_bank_pay_his",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "attr",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "bfm_staff",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "acct_book",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "offer_ver",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "postpaid_subs_plan_price",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "kyc_dump_report",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "service_rule_type",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "prod_attr_value_his",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "cust_type",
+      "mode": "full"
+    },
+    {
+      "schema": "cvbs",
+      "table": "acct_attr_value",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "gm_model",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "re_subs_order_inst",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "new_connection_reason",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "order_reason",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "indep_prod_order_attr",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "contact_channel",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "order_type",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "bfm_process_bo",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "wf_work_order_state",
+      "mode": "full"
+    },
+    {
+      "schema": "crm",
+      "table": "operation_type",
+      "mode": "full"
+    },
+    {
+      "schema": "drm",
+      "table": "itc_3_party_bill_number",
+      "mode": "full"
+    },
+    {
+      "schema": "drm",
+      "table": "drm_event_type",
+      "mode": "full"
+    },
+    {
+      "schema": "drm",
+      "table": "drm_party_type",
+      "mode": "full"
+    },
+    {
+      "schema": "drm",
+      "table": "drm_cust_payment",
+      "mode": "full"
+    },
+    {
+      "schema": "drm",
+      "table": "drm_dealer_type",
+      "mode": "full"
+    },
     {
       "schema": "cvbs",
       "table": "subs",
@@ -67,28 +310,243 @@
     },
     {
       "schema": "cvbs",
-      "table": "subs_event",
-      "mode": "full"
+      "table": "acc_nbr",
+      "mode": "scd1",
+      "primary_keys": ["ACC_NBR_ID"],
+      "incremental_column": "STATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "drm",
+      "table": "drm_sc_order_item",
+      "mode": "scd1",
+      "primary_keys": ["ORDER_ITEM_ID"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
     },
     {
       "schema": "cvbs",
-      "table": "acct_book",
-      "mode": "full"
+      "table": "sim_nbr",
+      "mode": "scd1",
+      "primary_keys": ["SIM_NBR_ID"],
+      "incremental_column": "STATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
     },
     {
       "schema": "cvbs",
-      "table": "prod_state",
-      "mode": "full"
+      "table": "subs",
+      "mode": "scd1",
+      "primary_keys": ["SUBS_ID"],
+      "incremental_column": "UPDATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
     },
     {
       "schema": "cvbs",
-      "table": "payment_type",
-      "mode": "full"
+      "table": "subs_upp_inst",
+      "mode": "scd1",
+      "primary_keys": ["SUBS_UPP_INST_ID"],
+      "incremental_column": "UPDATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "crm",
+      "table": "cust_order",
+      "mode": "scd1",
+      "primary_keys": ["CUST_ORDER_ID"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "crm",
+      "table": "wf_work_order",
+      "mode": "scd1",
+      "primary_keys": ["WORK_ORDER_ID"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "crm",
+      "table": "cust_contact",
+      "mode": "scd1",
+      "primary_keys": ["CUST_CONTACT_ID"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "crm",
+      "table": "itc_promo_code",
+      "mode": "scd1",
+      "primary_keys": ["CODE_ID"],
+      "incremental_column": "ACTIVATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
     },
     {
       "schema": "cvbs",
-      "table": "party_type",
-      "mode": "full"
+      "table": "event_charge",
+      "mode": "scd1",
+      "primary_keys": ["EVENT_INST_ID", "PRICE_ID", "SEQ", "DEDUCT_SEQ"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "prod_his",
+      "mode": "scd1",
+      "primary_keys": ["PROD_ID", "SEQ"],
+      "incremental_column": "REC_CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "bfm_staff_job",
+      "mode": "scd1",
+      "primary_keys": ["STAFF_JOB_ID"],
+      "incremental_column": "STATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "crm",
+      "table": "order_item",
+      "mode": "scd1",
+      "primary_keys": ["ORDER_ITEM_ID"],
+      "incremental_column": "STATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "prod_attr_value",
+      "mode": "scd1",
+      "primary_keys": ["PROD_ID", "ATTR_ID"],
+      "incremental_column": "UPDATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "crm",
+      "table": "order_item_memo",
+      "mode": "scd1",
+      "primary_keys": ["ORDER_ITEM_MEMO_ID"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "offer",
+      "mode": "scd1",
+      "primary_keys": ["OFFER_ID"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "acct_item",
+      "mode": "scd1",
+      "primary_keys": ["ACCT_ITEM_ID"],
+      "incremental_column": "STATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "drm",
+      "table": "drm_dealer",
+      "mode": "scd1",
+      "primary_keys": ["DEALER_ID"],
+      "incremental_column": "DEALER_STATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "itc_invoice",
+      "mode": "scd1",
+      "primary_keys": ["INVOICE_NBR"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "prod",
+      "mode": "scd1",
+      "primary_keys": ["PROD_ID"],
+      "incremental_column": "UPDATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "crm",
+      "table": "goods_order",
+      "mode": "scd1",
+      "primary_keys": ["goods_order_id"],
+      "incremental_column": "state_date",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "INSTANT_INVOICE_PAY",
+      "mode": "scd1",
+      "primary_keys": ["BATCH_ID"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "instant_payment",
+      "mode": "scd1",
+      "primary_keys": ["PAYMENT_ID"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "crm",
+      "table": "order_item_attr",
+      "mode": "scd1",
+      "primary_keys": ["ORDER_ITEM_ID", "ATTR_ID"],
+      "incremental_column": "state_date",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "bfm_staff_org",
+      "mode": "scd1",
+      "primary_keys": ["STAFF_ORG_ID"],
+      "incremental_column": "STATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "sim_card",
+      "mode": "scd1",
+      "primary_keys": ["SIM_CARD_ID"],
+      "incremental_column": "STATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "cust_attr_value",
+      "mode": "scd1",
+      "primary_keys": ["CUST_ID", "ATTR_ID"],
+      "incremental_column": "UPDATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "drm",
+      "table": "drm_dealer_staff",
+      "mode": "scd1",
+      "primary_keys": ["STAFF_ID"],
+      "incremental_column": "STATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "acct",
+      "mode": "scd1",
+      "primary_keys": ["ACCT_ID"],
+      "incremental_column": "UPDATE_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
+    },
+    {
+      "schema": "cvbs",
+      "table": "event_payment",
+      "mode": "scd1",
+      "primary_keys": ["EVENT_PAYMENT_ID"],
+      "incremental_column": "CREATED_DATE",
+      "initial_watermark": "1900-01-01 00:00:00"
     }
   ]
 }
