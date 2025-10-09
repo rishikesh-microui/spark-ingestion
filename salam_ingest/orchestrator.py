@@ -7,8 +7,11 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from pyspark.sql import SparkSession
 
 from .common import PrintLogger, RUN_ID
-from .io import HDFSOutbox, Paths
+from .endpoints import EndpointFactory
+from .io import HDFSOutbox
 from .notification import Heartbeat, Notifier
+from .planning import AdaptivePlanner, PlannerRequest
+from .planning.base import REGISTRY as PLANNER_REGISTRY
 from .staging import Staging, TimeAwareBufferedSink
 from .state import BufferedState, SingleStoreState
 from .strategies import IngestionFull, IngestionSCD1
@@ -23,21 +26,56 @@ def ingest_one_table(
     pool_name: str,
     load_date: str,
 ) -> Dict[str, Any]:
+    # ensure the default planner is registered
+    _ = AdaptivePlanner  # noqa: F841  (import side-effects)
+
     schema, table = tbl["schema"], tbl["table"]
     mode = tbl.get("mode", "full").lower()
-    rt = cfg["runtime"]
-    raw_dir, final_dir, base_raw = Paths.build(rt, schema, table, load_date)
     sc = spark.sparkContext
     sc.setLocalProperty("spark.scheduler.pool", pool_name)
-    sc.setJobGroup(f"ingest::{schema}.{table}", f"Ingest {schema}.{table} -> {raw_dir}")
-    logger.info("table_start", schema=schema, table=table, mode=mode, pool=pool_name, load_date=load_date)
+    sc.setJobGroup(f"ingest::{schema}.{table}", f"Ingest {schema}.{table}")
+    logger.info(
+        "table_start",
+        schema=schema,
+        table=table,
+        mode=mode,
+        pool=pool_name,
+        load_date=load_date,
+    )
+    source_ep, sink_ep = EndpointFactory.build_endpoints(spark, cfg, tbl)
+    planner = PLANNER_REGISTRY.get("default")
+    planner_request = PlannerRequest(
+        schema=schema,
+        table=table,
+        load_date=load_date,
+        mode=mode,
+        table_cfg={
+            "slicing": cfg["runtime"].get("scd1_slicing", {}),
+            "runtime": cfg["runtime"],
+            "table": tbl,
+        },
+    )
     if mode == "full":
         return IngestionFull.run(
-            spark, cfg, state, logger, schema, table, load_date, raw_dir, final_dir, tbl
+            spark,
+            cfg,
+            state,
+            logger,
+            source_ep,
+            sink_ep,
+            planner,
+            planner_request,
         )
     if mode == "scd1":
         return IngestionSCD1.run(
-            spark, cfg, state, logger, schema, table, load_date, raw_dir, base_raw, tbl
+            spark,
+            cfg,
+            state,
+            logger,
+            source_ep,
+            sink_ep,
+            planner,
+            planner_request,
         )
     raise ValueError(f"Unsupported mode: {mode}")
 
