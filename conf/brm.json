@@ -92,7 +92,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds", 
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -100,7 +101,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds", 
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -113,7 +115,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -121,7 +124,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -134,7 +138,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -222,7 +227,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -235,7 +241,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -248,7 +255,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -256,7 +264,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -269,7 +278,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -282,7 +292,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
@@ -310,7 +321,8 @@
       "mode": "scd1",
       "primary_keys": ["POID_ID0"],
       "incremental_column": "MOD_T",
-      "initial_watermark": "1970-01-01 00:00:00"
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
     },
     {
       "schema": "PIN01",
