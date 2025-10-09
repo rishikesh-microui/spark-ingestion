@@ -25,9 +25,9 @@
 
     "state_backend": "singlestore",
     "state_flush": {
-    "max_events": 200,            
-    "max_age_seconds": 30,       
-    "check_interval_seconds": 5  
+      "max_events": 200,
+      "max_age_seconds": 30,
+      "check_interval_seconds": 5
     },
     "state": {
       "hdfs": { "dir": "hdfs:///datalake/_ingestion_state" },
@@ -40,6 +40,18 @@
         "watermarksTable": "control_watermarks",
         "sourceId": "miniboss-bss-datalake"
       }
+    },
+    "staging": {
+      "root": "hdfs:///datalake/_staging_slices",
+      "ttl_hours": 72,
+      "enabled": true
+    },
+    "scd1_slicing": {
+      "enabled": true,
+      "max_duration_hours": 168,
+      "max_count": 10000000,
+      "target_rows_per_slice": 1000000,
+      "max_partitions": 24
     },
     "intermediate": {
       "enabled": true,
@@ -302,14 +314,6 @@
     },
     {
       "schema": "cvbs",
-      "table": "subs",
-      "mode": "scd1",
-      "primary_keys": ["SUBS_ID"],
-      "incremental_column": "UPDATE_DATE",
-      "initial_watermark": "1900-01-01 00:00:00"
-    },
-    {
-      "schema": "cvbs",
       "table": "acc_nbr",
       "mode": "scd1",
       "primary_keys": ["ACC_NBR_ID"],
@@ -474,11 +478,12 @@
       "mode": "scd1",
       "primary_keys": ["goods_order_id"],
       "incremental_column": "state_date",
+      "query_sql": "SELECT oia.* , oi.STATE_DATE FROM CRM.GOODS_ORDER oia, CRM.ORDER_ITEM oi WHERE oia.ORDER_ITEM_ID  = oi.ORDER_ITEM_ID",
       "initial_watermark": "1900-01-01 00:00:00"
     },
     {
       "schema": "cvbs",
-      "table": "INSTANT_INVOICE_PAY",
+      "table": "instant_invoice_pay",
       "mode": "scd1",
       "primary_keys": ["BATCH_ID"],
       "incremental_column": "CREATED_DATE",
@@ -498,6 +503,7 @@
       "mode": "scd1",
       "primary_keys": ["ORDER_ITEM_ID", "ATTR_ID"],
       "incremental_column": "state_date",
+      "query_sql": "SELECT oia.* , oi.STATE_DATE FROM CRM.ORDER_ITEM_ATTR oia, CRM.ORDER_ITEM oi WHERE oia.ORDER_ITEM_ID  = oi.ORDER_ITEM_ID",
       "initial_watermark": "1900-01-01 00:00:00"
     },
     {

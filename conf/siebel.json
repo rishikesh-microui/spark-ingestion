@@ -5,22 +5,23 @@
     "password": "Prod#321",
     "driver": "oracle.jdbc.OracleDriver",
     "fetchsize": 10000,
+    "dialect": "oracle",
     "default_num_partitions": 8
   },
   "runtime": {
+    "job_name": "siebel_dl",
+    "dynamicAllocation": false,
+    "initialExecutors": 2,
+    "raw_root": "hdfs:///datalake/ingestion-fm/raw/siebel_dl",
+    "final_root": "hdfs:///datalake/ingestion-fm/final/siebel_dl",
     "timezone": "Asia/Kolkata",
-    "max_parallel_tables": 4,
-
-    "raw_root": "hdfs:///datalake/raw/oracle",
-    "final_root": "hdfs:///datalake/final/oracle",
     "append_table_schema": false,
-
+    "max_parallel_tables": 4,
     "write_format": "parquet",
     "compression": "snappy",
-
     "finalize_full_refresh": true,
     "finalize_strategy": "copy_and_swap_final",
-    "hive": { "enabled": true, "db": "bronze" },
+    "hive": { "enabled": true, "db": "siebel_dl_ing" },
 
     "state_backend": "singlestore",
     "state": {
@@ -38,39 +39,309 @@
   },
   "tables": [
     {
-      "schema": "siebel",
-      "table": "s_contact",
+      "schema": "SIEBEL",
+      "table": "cx_acc_profile",
       "mode": "full"
     },
     {
-      "schema": "siebel",
-      "table": "s_user",
+      "schema": "SIEBEL",
+      "table": "cx_cust_profile",
       "mode": "full"
     },
     {
-      "schema": "siebel",
-      "table": "s_prod_int",
+      "schema": "SIEBEL",
+      "table": "cx_department",
       "mode": "full"
     },
     {
-      "schema": "siebel",
-      "table": "s_prod_ln",
+      "schema": "SIEBEL",
+      "table": "cx_itc_dept_cnt",
       "mode": "full"
     },
     {
-      "schema": "siebel",
-      "table": "s_postn",
+      "schema": "SIEBEL",
+      "table": "s_accnt_postn",
       "mode": "full"
     },
     {
-      "schema": "siebel",
-      "table": "s_org_ext",
+      "schema": "SIEBEL",
+      "table": "s_con_addr",
       "mode": "full"
     },
     {
-      "schema": "siebel",
+      "schema": "SIEBEL",
+      "table": "s_contact_x",
+      "mode": "full"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_emp_per",
+      "mode": "full"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_party_per",
+      "mode": "full"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_act_emp",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_addr_per",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
       "table": "s_asset",
-      "mode": "full"
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_asset_om",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_asset_x",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+
+    {
+      "schema": "SIEBEL",
+      "table": "s_contact",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+
+    {
+      "schema": "SIEBEL",
+      "table": "s_doc_quote",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_doc_quote_x",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+
+    {
+      "schema": "SIEBEL",
+      "table": "s_evt_act",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_evt_act_x",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_inv_prof",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_lead",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_opty",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_order",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_order_item",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_order_item_om",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_order_item_x",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_order_item_xa",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_order_postn",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_order_type",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_org_ext",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_org_ext_x",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_party",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+
+    {
+      "schema": "SIEBEL",
+      "table": "s_postn",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_prod_int",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_prod_ln",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_quote_item",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_quote_item_x",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_quote_item_xa",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_quote_postn",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_unvbx_itmtask",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
+    },
+    {
+      "schema": "SIEBEL",
+      "table": "s_user",
+      "mode": "scd1",
+      "primary_keys": ["ROW_ID"],
+      "incremental_column": "LAST_UPD",
+      "initial_watermark": "1970-01-01 00:00:00"
     }
   ]
 }

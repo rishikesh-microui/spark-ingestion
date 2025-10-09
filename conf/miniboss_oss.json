@@ -36,6 +36,18 @@
         "sourceId": "miniboss-oss-datalake"
       }
     },
+    "staging": {
+      "root": "hdfs:///datalake/_staging_slices",
+      "ttl_hours": 72,
+      "enabled": true
+    },
+    "scd1_slicing": {
+      "enabled": true,
+      "max_duration_hours": 168,
+      "max_count": 10000000,
+      "target_rows_per_slice": 1000000,
+      "max_partitions": 24
+    },
     "intermediate": {
       "enabled": true,
       "type": "iceberg",
@@ -236,14 +248,6 @@
       "mode": "scd1",
       "primary_keys": ["ORD_NO"],
       "incremental_column": "ARC_DATE",
-      "initial_watermark": "1900-01-01 00:00:00"
-    },
-    {
-      "schema": "itcftth",
-      "table": "srv_cfs_ver_attr",
-      "mode": "scd1",
-      "primary_keys": ["VER_ID", "ATTR_ID"],
-      "incremental_column": "CREATE_DATE",
       "initial_watermark": "1900-01-01 00:00:00"
     },
     {

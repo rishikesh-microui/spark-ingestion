@@ -6,6 +6,7 @@ Generic Spark Ingestion Framework
 - SingleStore state (events + progress) with preload + buffered writes
 - JSON logs + per-partition _METRICS.json
 """
+import hashlib
 from argparse import Namespace
 from pyspark.sql import SparkSession, Row, Window as W
 from pyspark.sql import functions as F
@@ -163,6 +164,181 @@ class Heartbeat:
             self._thread.join(timeout=5)
 
 
+class SourceProbe:
+    @staticmethod
+    def _count_query(dialect, base_from_sql, incr_col, wm_lit, wm_hi_lit=None):
+        # base_from_sql is either "schema.table" or "(SELECT ... ) t"
+        if dialect == "oracle":
+            pred = f"{incr_col} > TO_TIMESTAMP('{wm_lit}', 'YYYY-MM-DD HH24:MI:SS')"
+            if wm_hi_lit:
+                pred += f" AND {incr_col} <= TO_TIMESTAMP('{wm_hi_lit}', 'YYYY-MM-DD HH24:MI:SS')"
+            return f"(SELECT COUNT(1) AS CNT FROM {base_from_sql} WHERE {pred}) c"
+        elif dialect == "mssql":
+            lo = wm_lit.replace(" ", "T")
+            pred = f"[{incr_col}] > CONVERT(DATETIME2, '{lo}', 126)"
+            if wm_hi_lit:
+                hi = wm_hi_lit.replace(" ", "T")
+                pred += f" AND [{incr_col}] <= CONVERT(DATETIME2, '{hi}', 126)"
+            return f"(SELECT COUNT_BIG(1) AS CNT FROM {base_from_sql} WHERE {pred}) c"
+        else:
+            pred = f"{incr_col} > '{wm_lit}'"
+            if wm_hi_lit:
+                pred += f" AND {incr_col} <= '{wm_hi_lit}'"
+            return f"(SELECT COUNT(1) AS CNT FROM {base_from_sql} WHERE {pred}) c"
+
+    @staticmethod
+    def estimate_count(spark, jdbc, base_from_sql, incr_col, wm_lit, wm_hi_lit=None):
+        q = SourceProbe._count_query(jdbc.get("dialect", "oracle").lower(),
+                                     base_from_sql, incr_col, wm_lit, wm_hi_lit)
+        df = (spark.read.format("jdbc")
+              .option("url", jdbc["url"])
+              .option("dbtable", q)
+              .option("user", jdbc["user"])
+              .option("password", jdbc["password"])
+              .option("driver", jdbc["driver"])
+              .option("fetchsize", 1000)
+              .load())
+        return int(df.collect()[0][0])
+
+class AdaptiveSlicePlanner:
+    """
+    Returns a list of slices [(lo, hi), ...] where lo<hi (both literals as strings).
+    For int/epoch columns, pass ints (stringified). For timestamps, pass 'YYYY-MM-DD HH:MM:SS'.
+    """
+    @staticmethod
+    def _time_lits(wm_str, now_str, parts):
+        # even time buckets
+        from datetime import datetime, timedelta
+        fmt = "%Y-%m-%d %H:%M:%S"
+        t0 = datetime.strptime(wm_str[:19], fmt)
+        t1 = datetime.strptime(now_str[:19], fmt)
+        step = (t1 - t0) / parts
+        bounds = [t0 + i*step for i in range(parts)] + [t1]
+        lits = [b.strftime(fmt) for b in bounds]
+        return [(lits[i], lits[i+1]) for i in range(parts)]
+
+    @staticmethod
+    def _int_lits(lo_int, hi_int, parts):
+        step = max(1, (hi_int - lo_int) // parts)
+        bounds = [lo_int + i*step for i in range(parts)] + [hi_int]
+        return [(str(bounds[i]), str(bounds[i+1])) for i in range(parts)]
+
+    @staticmethod
+    def plan(spark, logger, jdbc, tbl_cfg, base_from_sql, incr_col,
+             last_wm, now_lit, is_int_epoch,
+             slicing_cfg):
+        # thresholds
+        max_dur_h = int(slicing_cfg.get("max_duration_hours", 168))
+        max_count = int(slicing_cfg.get("max_count", 10_000_000))
+        target = int(slicing_cfg.get("target_rows_per_slice", 1_000_000))
+        max_parts = int(slicing_cfg.get("max_partitions", 24))
+
+        # 1) Duration check (only for timestamps)
+        duration_ok = True
+        if not is_int_epoch:
+            fmt = "%Y-%m-%d %H:%M:%S"
+            from datetime import datetime
+            t0 = datetime.strptime(last_wm[:19], fmt)
+            t1 = datetime.strptime(now_lit[:19], fmt)
+            duration_ok = ((t1 - t0).total_seconds()/3600.0) <= max_dur_h
+
+        # 2) Count estimate over whole window
+        total = SourceProbe.estimate_count(
+            spark, jdbc, base_from_sql, incr_col, last_wm, now_lit)
+        logger.info("slice_probe", total=total, duration_ok=duration_ok)
+
+        # If small enough — single slice
+        if duration_ok and total <= max_count:
+            return [(last_wm, now_lit)]
+
+        # 3) Compute partitions by target size
+        parts = min(max_parts, max(2, (total + target - 1)//target))
+
+        # 4) Build slices: time buckets or integer buckets
+        if is_int_epoch:
+            lo = int(last_wm)
+            hi = int(now_lit)
+            return AdaptiveSlicePlanner._int_lits(lo, hi, parts)
+        else:
+            return AdaptiveSlicePlanner._time_lits(last_wm, now_lit, parts)
+
+
+class Staging:
+    @staticmethod
+    def root(cfg): return cfg["runtime"]["staging"]["root"]
+
+    @staticmethod
+    def slice_dir(cfg, schema, table, incr_col, lo, hi):
+        key = f"{schema}.{table}|{incr_col}|{lo}|{hi}"
+        hid = hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+        return f"{Staging.root(cfg)}/{schema}/{table}/inc={incr_col}/slices/{hid}"
+
+    @staticmethod
+    def exists(spark, path):
+        jsc = spark._jsc
+        jvm = spark.sparkContext._jvm
+        conf = jsc.hadoopConfiguration()
+        p = jvm.org.apache.hadoop.fs.Path(path)
+        return p.getFileSystem(conf).exists(p)
+
+    @staticmethod
+    def write_text(spark, path, content):
+        HDFSUtil.write_text(spark, path, content)
+
+    @staticmethod
+    def mark_success(spark, dirpath):
+        Staging.write_text(spark, f"{dirpath}/_SUCCESS", "{}")
+
+    @staticmethod
+    def mark_landed(spark, dirpath):
+        Staging.write_text(spark, f"{dirpath}/_LANDED", "{}")
+
+    @staticmethod
+    def is_success(spark, dirpath):
+        return Staging.exists(spark, f"{dirpath}/_SUCCESS")
+
+    @staticmethod
+    def is_landed(spark, dirpath):
+        return Staging.exists(spark, f"{dirpath}/_LANDED")
+
+    @staticmethod
+    def ttl_cleanup(spark, cfg, logger, now_epoch_ms=None):
+        """Remove slice dirs older than ttl that have both _SUCCESS and _LANDED."""
+        # Simple recursive scanner to delete eligible dirs.
+        try:
+            jvm = spark.sparkContext._jvm
+            jsc = spark._jsc
+            conf = jsc.hadoopConfiguration()
+            fs = jvm.org.apache.hadoop.fs.FileSystem.get(conf)
+            Path = jvm.org.apache.hadoop.fs.Path
+            root = Path(Staging.root(cfg))
+            if not fs.exists(root):
+                return
+            ttl_ms = int(cfg["runtime"]["staging"].get(
+                "ttl_hours", 72)) * 3600 * 1000
+            now_ms = now_epoch_ms or int(time.time() * 1000)
+
+            def list_dirs(p):
+                for st in fs.listStatus(p):
+                    if st.isDirectory():
+                        yield st.getPath()
+                        for sub in list_dirs(st.getPath()):
+                            yield sub
+
+            for d in list_dirs(root):
+                dstr = d.toString()
+                if dstr.endswith("/slices") or "/slices/" not in dstr:
+                    continue
+                # only delete if success & landed and old enough
+                if (Staging.exists(spark, f"{dstr}/_SUCCESS") and
+                        Staging.exists(spark, f"{dstr}/_LANDED")):
+                    age = now_ms - fs.getFileStatus(d).getModificationTime()
+                    if age > ttl_ms:
+                        logger.info("staging_ttl_delete", path=dstr)
+                        fs.delete(d, True)
+        except Exception as e:
+            logger.warn("staging_ttl_cleanup_failed", err=str(e))
+
 class TimeAwareBufferedSink:
     def __init__(self, base_state, logger, outbox=None,
                  flush_every=50, flush_age_seconds=120):
@@ -247,6 +423,44 @@ class TimeAwareBufferedSink:
             self._progress_buf[:0] = batch
             self.logger.error("sink_flush_progress_failed",
                               reason=reason, err=str(e), rows=len(batch))
+
+class DateUtil:
+    @staticmethod
+    def build_time_windows(start_iso: str, end_iso: str, step_hours: int = 24):
+        # Use UTC for safety; convert your known source timezone if needed
+        dt = datetime.fromisoformat(start_iso.replace(
+            "Z", "")).replace(tzinfo=timezone.utc)
+        end = datetime.fromisoformat(end_iso.replace(
+            "Z", "")).replace(tzinfo=timezone.utc)
+        out = []
+        step = timedelta(hours=step_hours)
+        while dt < end:
+            nxt = min(dt + step, end)
+            # return both SQL literal forms
+            out.append({
+                "iso_left": dt.strftime("%Y-%m-%dT%H:%M:%S"),
+                "iso_right": nxt.strftime("%Y-%m-%dT%H:%M:%S"),
+                "ts_left": dt.strftime("%Y-%m-%d %H:%M:%S"),
+                "ts_right": nxt.strftime("%Y-%m-%d %H:%M:%S"),
+            })
+            dt = nxt
+        return out
+
+    @staticmethod
+    def build_predicates(dialect: str, incr_col: str, windows):
+        preds = []
+        d = dialect.lower()
+        for w in windows:
+            if d == "mssql":
+                preds.append(
+                    f"[{incr_col}] >= '{w['iso_left']}' AND [{incr_col}] < '{w['iso_right']}'")
+            elif d == "oracle":
+                preds.append(
+                    f"{incr_col} >= TIMESTAMP '{w['ts_left']}' AND {incr_col} < TIMESTAMP '{w['ts_right']}'")
+            else:  # generic
+                preds.append(
+                    f"{incr_col} >= '{w['ts_left']}' AND {incr_col} < '{w['ts_right']}'")
+        return preds
 
 # =========================
 # HDFS util: write small text file (e.g., _METRICS.json)
@@ -756,6 +970,46 @@ def with_ingest_cols(df):
 
 class JDBC:
     @staticmethod
+    def build_from_sql(jdbc, schema, table, tbl_cfg):
+        # Returns either "schema.table" or "(SELECT ... ) t"
+        if "query_sql" in tbl_cfg and tbl_cfg["query_sql"].strip():
+            return f"({tbl_cfg['query_sql']}) q"
+        # MSSQL safe quoting
+        if jdbc.get("dialect", "oracle").lower() == "mssql":
+            return f"[{schema}].[{table}]"
+        return f"{schema}.{table}"
+
+    @staticmethod
+    def dbtable_for_range(jdbc, base_from_sql, incr_col, tbl_cfg, lo_lit, hi_lit=None):
+        dialect = jdbc.get("dialect", "oracle").lower()
+        incr_type = (tbl_cfg.get("incr_col_type") or "").lower()
+        cols = tbl_cfg.get("cols", "*")
+        if isinstance(cols, list):
+            cols = ", ".join(cols)
+        if dialect == "oracle":
+            pred = f"{incr_col} > TO_TIMESTAMP('{lo_lit}','YYYY-MM-DD HH24:MI:SS')"
+            if hi_lit:
+                pred += f" AND {incr_col} <= TO_TIMESTAMP('{hi_lit}','YYYY-MM-DD HH24:MI:SS')"
+        elif dialect == "mssql":
+            if incr_type in ("epoch_seconds", "epoch_millis"):
+                # NUMERIC comparison; last_wm is stored as a string -> cast to int
+                lo = int(float(lo_lit))
+                pred = f" [{incr_col}] > {lo}"
+                if hi_lit:
+                    hi = int(float(hi_lit))
+                    pred += f" AND [{incr_col}] <= {hi}"
+            else:
+                lo = lo_lit.replace(" ", "T")
+                pred = f"[{incr_col}] > CONVERT(DATETIME2,'{lo}',126)"
+                if hi_lit:
+                    hi = hi_lit.replace(" ", "T")
+                    pred += f" AND [{incr_col}] <= CONVERT(DATETIME2,'{hi}',126)"
+        else:
+            pred = f"{incr_col} > '{lo_lit}'" + \
+                (f" AND {incr_col} <= '{hi_lit}'" if hi_lit else "")
+        return f"(SELECT {cols} FROM {base_from_sql} WHERE {pred}) t"
+
+    @staticmethod
     def reader(spark, jdbc, schema, table, tbl_cfg):
         r = (spark.read.format("jdbc")
              .option("url", jdbc["url"])
@@ -778,40 +1032,7 @@ class JDBC:
         Oracle-optimized pushdown. Fallback to generic if dialect not provided.
         cfg["jdbc"].get("dialect") in {"oracle","generic"}
         """
-        dialect = jdbc.get("dialect", "oracle").lower()
-        cols = tbl_cfg.get("columns", "*")
-        incr_type = (tbl_cfg.get("incr_col_type") or "").lower()
-        if isinstance(cols, list):
-            cols = ", ".join(cols)
-        if dialect == "oracle":
-            # TO_TIMESTAMP avoids implicit casts; ensure last_wm format 'YYYY-MM-DD HH24:MI:SS'
-            pred = f"WHERE {incr_col} > TO_TIMESTAMP('{last_wm}', 'YYYY-MM-DD HH24:MI:SS')"
-            dbtable = f"(SELECT {cols} FROM {schema}.{table} {pred}) t"
-        elif dialect == "mssql":
-            # Quote with [] for safety; table hint is optional and configurable
-            sch_tbl = f"[{schema}].[{table}]"
-            # e.g., "WITH (READPAST, NOLOCK)" if approved
-            hint = tbl_cfg.get("mssql", {}).get("table_hint")
-            hint_sql = f" {hint}" if hint else ""
-
-            incr_type = (tbl_cfg.get("incr_col_type") or "").lower()
-            # ISO 8601 (style 126) → SARGable literal; DO NOT wrap the column
-            # If incr_col is DATETIME (not DATETIME2), this still works; precision is lower (~3ms)
-            if incr_type in ("epoch_seconds", "epoch_millis"):
-                # NUMERIC comparison; last_wm is stored as a string -> cast to int
-                wm_int = int(float(last_wm))
-                pred = f"WHERE [{incr_col}] > {wm_int}"
-            else:
-                # datetime/datetime2 path (unchanged)
-                # 'YYYY-MM-DDTHH:MM:SS'
-                iso = last_wm[:19].replace(" ", "T")
-                pred = f"WHERE [{incr_col}] > CONVERT(DATETIME2, '{iso}', 126)"
-
-            dbtable = f"(SELECT {cols} FROM {sch_tbl}{hint_sql} {pred}) t"
-        else:
-            # generic: hope DB can parse the string literal directly
-            pred = f"WHERE {incr_col} > '{last_wm}'"
-            dbtable = f"(SELECT {cols} FROM {schema}.{table} {pred}) t"
+        dbtable = JDBC.dbtable_for_range(jdbc, schema, table, incr_col, tbl_cfg, last_wm, None)
         r = (spark.read.format("jdbc")
              .option("url", jdbc["url"])
              .option("dbtable", dbtable)
@@ -1138,7 +1359,8 @@ class IcebergHelper:
         tgt = f"{cat}.{db}.{schema}__{table}"
         IcebergHelper.setup_catalog(spark, cfg)
         if partition_col not in df_src.columns:
-            df_src = df_src.withColumn(partition_col, F.lit(load_date))
+            df_src = df_src.withColumn(
+                partition_col, F.to_date(F.lit(load_date), "yyyy-MM-dd"))
         # Dedup latest winner
         order_cols = [incr_col] if incr_col else []
         order_cols.append(partition_col)
@@ -1164,6 +1386,7 @@ class IcebergHelper:
         insert_cols = ", ".join([f"`{c}`" for c in src_cols])
         insert_vals = ", ".join([f"s.`{c}`" for c in src_cols])
         merge_sql += f"WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})"
+
         spark.sql(merge_sql)
         return tgt
     @staticmethod
@@ -1199,6 +1422,15 @@ class IcebergHelper:
             )
         return {"final_parquet_path": part_path}
 
+    @staticmethod 
+    def _compute_wm_ld(df, incr_col, is_int_epoch = False):
+        if is_int_epoch:
+            agg2 = df.select(F.max(col(incr_col).cast("long")).alias("wm"),
+                                    F.max(col("load_date")).alias("ld")).collect()[0]
+        else:
+            agg2 = df.select(F.max(col(incr_col)).alias("wm"),
+                                    F.max(col("load_date")).alias("ld")).collect()[0]
+        return str(agg2["wm"]), str(agg2["ld"])
 # =========================
 # Ingestion strategies
 # =========================
@@ -1321,30 +1553,68 @@ class IngestionSCD1:
         
         logger.info("scd1_effective_wm", schema=schema, table=table,
                     last_wm=last_wm, lag_seconds=lag, effective_wm=eff_wm)
-        # 2) pull increment (pushdown) → RAW today
-        inc_reader = JDBC.reader_increment(
-            spark, jdbc, schema, table, tbl_cfg, incr_col, eff_wm)
-        inc_df = inc_reader.load().persist()
-        agg = inc_df.agg(F.count(lit(1)).alias("cnt"), F.max(
-            col(incr_col)).alias("wm")).collect()[0]
-        pulled = int(agg["cnt"])
-        logger.info("scd1_pulled", schema=schema, table=table, pulled=pulled)
-        if pulled > 0:
-            RawIO.land_append(spark, logger, with_ingest_cols(inc_df), rt,
-                              raw_dir, state, schema, table, load_date, "scd1")
-        else:
-            state.mark_event(schema, table, load_date, "scd1",
-                             "raw", "success", rows_written=0, location=raw_dir)
-        inc_df.unpersist()
-        # 3) RAW increment window to merge (>= last_ld & > last_wm)
-        raw_to_merge = RawIO.raw_increment_df(
-            spark, rt, schema, table, last_ld, eff_wm, incr_col, incr_type).persist()
-        to_merge_count = raw_to_merge.count()
-        logger.info("scd1_merge_window", schema=schema, table=table,
-                    to_merge=to_merge_count, filter_ld=last_ld, filter_wm=last_wm)
-        if to_merge_count == 0:
-            raw_to_merge.unpersist()
+
+        # utilize slicing if needed.
+        # 0) Build base FROM (table or wrapped query)
+        base_from = JDBC.build_from_sql(jdbc, schema, table, tbl_cfg)
+        is_int_epoch = str(incr_type).lower() in (
+            "int", "bigint", "epoch", "epoch_seconds", "epoch_millis")
+
+        # 1) Decide slicing
+        now_lit = datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S") if not is_int_epoch else str(int(time.time()))
+        slices = [(eff_wm, now_lit)]
+        scfg = rt.get("scd1_slicing", {})
+        if scfg.get("enabled", False):
+            slices = AdaptiveSlicePlanner.plan(
+                spark, logger, jdbc, tbl_cfg, base_from, incr_col, eff_wm, now_lit, is_int_epoch, scfg)
+
+        logger.info("scd1_planned_slices", schema=schema, table=table, n=len(slices))
+
+
+        # 2) Stage each slice (resume-friendly)
+        staged_dirs = []
+        for lo, hi in slices:
+            sdir = Staging.slice_dir(cfg, schema, table, incr_col, lo, hi)
+            if Staging.is_success(spark, sdir):
+                logger.info("slice_skip_found_success",
+                            schema=schema, table=table, lo=lo, hi=hi)
+                staged_dirs.append(sdir)
+                continue
+
+            dbtable = JDBC.dbtable_for_range(jdbc, base_from, incr_col, tbl_cfg, lo, hi)
+            reader = (spark.read.format("jdbc")
+                    .option("url", jdbc["url"])
+                    .option("dbtable", dbtable)
+                    .option("user", jdbc["user"])
+                    .option("password", jdbc["password"])
+                    .option("driver", jdbc["driver"])
+                    .option("fetchsize", int(jdbc.get("fetchsize", 10000))))
+            df_slice = with_ingest_cols(reader.load())
+            # write to slice dir (overwrite to be idempotent)
+            (df_slice.write
+                .format(rt.get("write_format", "parquet"))
+                .mode("overwrite")
+                .option("compression", rt.get("compression", "snappy"))
+                .save(sdir))
+            Staging.write_text(spark, f"{sdir}/_RANGE.json", json.dumps(
+                {"lo": lo, "hi": hi, "planned_at": datetime.now().isoformat()}))
+            Staging.mark_success(spark, sdir)
+            logger.info("slice_staged", schema=schema,
+                        table=table, lo=lo, hi=hi, path=sdir)
+            staged_dirs.append(sdir)
+
+        # 3) Union all staged slices for this window
+        if not staged_dirs:
+            logger.info("scd1_no_slices_staged", schema=schema, table=table)
             return {"table": f"{schema}.{table}", "mode": "scd1", "rows": 0, "raw": raw_dir, "wm": last_wm, "last_loaded_date": last_ld}
+
+        window_df = spark.read.format(
+            rt.get("write_format", "parquet")).load(staged_dirs)
+        to_merge_count = window_df.count()
+        logger.info("scd1_window_ready", schema=schema,
+                    table=table, rows=to_merge_count)
+
         # 4) Intermediate merge (Iceberg)
         inter_cfg = rt.get("intermediate", {"enabled": False})
         state.mark_event(schema, table, load_date, "scd1",
@@ -1354,7 +1624,7 @@ class IngestionSCD1:
             try:
                 if inter_cfg.get("type", "iceberg") == "iceberg" and pk_cols:
                     tgt = IcebergHelper.merge_upsert(
-                        spark, cfg, schema, table, raw_to_merge, pk_cols,
+                        spark, cfg, schema, table, window_df, pk_cols,
                         load_date, partition_col=rt.get("hive_reg", {}).get(
                             "partition_col", "load_date"),
                         incr_col=incr_col
@@ -1371,39 +1641,38 @@ class IngestionSCD1:
                 state.mark_event(schema, table, load_date,
                                  "scd1", "intermediate", "success")
             except Exception as e:
+                traceback.print_exc()
                 ok = False
                 info["intermediate_error"] = str(e)
                 state.mark_event(schema, table, load_date, "scd1",
                                  "intermediate", "failed", error=str(e))
                 logger.error("scd1_intermediate_failed",
                              schema=schema, table=table, err=str(e))
-        # 5) watermark advance only if ok (or intermediate disabled)
-        if ok:
-            if incr_type.startswith("epoch") or incr_type in ("bigint", "int", "numeric", "decimal"):
-                agg2 = raw_to_merge.select(F.max(col(incr_col).cast("long")).alias("wm"),
-                                        F.max(col("load_date")).alias("ld")).collect()[0]
-
-
-            else:
-                agg2 = raw_to_merge.select(F.max(col(incr_col)).alias("wm"),
-                                        F.max(col("load_date")).alias("ld")).collect()[0]
-            new_wm, new_ld = str(agg2["wm"]), str(agg2["ld"])
-
-            state.mark_event(schema, table, load_date, "scd1",
-                             "watermark", "success", watermark=new_wm)
-            state.set_progress(schema, table, watermark=new_wm,
-                               last_loaded_date=new_ld)
-            logger.info("scd1_wm_advanced", schema=schema,
-                        table=table, new_wm=new_wm, new_ld=new_ld)
-            res = {"table": f"{schema}.{table}", "mode": "scd1", "rows": to_merge_count,
-                   "raw": raw_dir, "wm": new_wm, "last_loaded_date": new_ld}
-            res.update(info)
-            raw_to_merge.unpersist()
-            return res
-        else:
-            raw_to_merge.unpersist()
+        
+        if not ok:
             return {"table": f"{schema}.{table}", "mode": "scd1", "rows": to_merge_count,
                     "raw": raw_dir, "wm": last_wm, "last_loaded_date": last_ld, **info}
+
+        # 5) watermark advance only if ok (or intermediate disabled)
+        # 5) On success: land slices into RAW for today's load_date; mark _LANDED
+        for sdir in staged_dirs:
+            df = spark.read.format(rt.get("write_format", "parquet")).load(sdir)
+            RawIO.land_append(spark, logger, df, rt, raw_dir, state,
+                            schema, table, load_date, "scd1")
+            Staging.mark_landed(spark, sdir)
+        
+        raw_to_merge = RawIO.raw_increment_df(
+            spark, rt, schema, table, last_ld, eff_wm, incr_col, incr_type)
+        new_wm, new_ld = IcebergHelper._compute_wm_ld(raw_to_merge, incr_col, is_int_epoch)
+        state.mark_event(schema, table, load_date, "scd1",
+                        "watermark", "success", watermark=new_wm)
+        state.set_progress(schema, table, watermark=new_wm, last_loaded_date=new_ld)
+        logger.info("scd1_wm_advanced", schema=schema,
+                    table=table, new_wm=new_wm, new_ld=new_ld)
+        return {"table": f"{schema}.{table}", "mode": "scd1", "rows": to_merge_count,
+                "raw": raw_dir, "wm": new_wm, "last_loaded_date": new_ld, **info}
+
+        
 
 # =========================
 # Orchestration
@@ -1624,6 +1893,8 @@ if __name__ == "__main__":
         .getOrCreate()
     )
     main(spark, cfg, args)
+    if cfg["runtime"].get("staging", {}).get("enabled", True):
+        Staging.ttl_cleanup(spark, cfg, logger)
     spark.stop()
 
 
