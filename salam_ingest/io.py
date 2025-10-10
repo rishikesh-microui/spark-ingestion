@@ -2,9 +2,11 @@ import json
 import time
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, Iterable, List, Optional, Sequence, Tuple
 
 from pyspark.sql import DataFrame, Row, SparkSession
+from pyspark.sql.types import StructType
+from pyspark.sql.utils import AnalysisException, ParseException
 from pyspark.sql import functions as F
 from pyspark.sql.functions import col, lit, to_timestamp
 from pyspark.sql.window import Window as W
@@ -13,7 +15,7 @@ from .common import RUN_ID, with_ingest_cols
 
 
 class SourceProbe:
-    def _count_query(dialect: str, base_from_sql: str, incr_col: str, is_int_epoch: bool, wm_lit: str, wm_hi_lit: str | None = None) -> str:
+    def _count_query(dialect: str, base_from_sql: str, incr_col: str, is_int_epoch: bool, wm_lit: str, wm_hi_lit: Optional[str] = None) -> str:
         if is_int_epoch:
             pred = f"{incr_col} > {wm_lit}"
             if wm_hi_lit:
@@ -215,14 +217,14 @@ class Paths:
 
 class Utils:
     @staticmethod
-    def minus_seconds_datetime(wm_str: str, seconds: int | None) -> str:
+    def minus_seconds_datetime(wm_str: str, seconds: Optional[int]) -> str:
         if not seconds:
             return wm_str
         dt = datetime.strptime(wm_str[:19], "%Y-%m-%d %H:%M:%S")
         return (dt - timedelta(seconds=int(seconds))).strftime("%Y-%m-%d %H:%M:%S")
 
     @staticmethod
-    def minus_seconds_epoch(wm_str: str, seconds: int | None, millis: bool = False) -> str:
+    def minus_seconds_epoch(wm_str: str, seconds: Optional[int], millis: bool = False) -> str:
         if not seconds:
             return wm_str
         base = int(float(wm_str))
@@ -230,7 +232,7 @@ class Utils:
         return str(max(adj, 0))
 
     @staticmethod
-    def minus_seconds(wm_str: str, seconds: int | None) -> str:
+    def minus_seconds(wm_str: str, seconds: Optional[int]) -> str:
         if not seconds:
             return wm_str
         dt = datetime.strptime(wm_str[:19], "%Y-%m-%d %H:%M:%S")
@@ -667,12 +669,17 @@ class HiveHelper:
 
 class IcebergHelper:
     @staticmethod
+    def _identifier(schema: str, table: str) -> str:
+        return f"{schema.lower()}__{table.lower()}"
+
+    @staticmethod
     def setup_catalog(spark: SparkSession, cfg: Dict[str, Any]) -> None:
         inter = cfg["runtime"]["intermediate"]
         cat, wh = inter["catalog"], inter["warehouse"]
         spark.conf.set(f"spark.sql.catalog.{cat}", "org.apache.iceberg.spark.SparkCatalog")
         spark.conf.set(f"spark.sql.catalog.{cat}.type", "hadoop")
         spark.conf.set(f"spark.sql.catalog.{cat}.warehouse", wh)
+        spark.conf.set(f"spark.sql.catalog.{cat}.case-sensitive", "true")
 
     @staticmethod
     def ensure_table(
@@ -685,7 +692,8 @@ class IcebergHelper:
     ) -> str:
         inter = cfg["runtime"]["intermediate"]
         cat, db = inter["catalog"], inter["db"]
-        full = f"{cat}.{db}.{schema}__{table}"
+        tbl_ident = IcebergHelper._identifier(schema, table)
+        full = f"{cat}.{db}.{tbl_ident}"
         spark.sql(f"CREATE NAMESPACE IF NOT EXISTS {cat}.{db}")
         cols = ", ".join([f"`{c}` {df.schema[c].dataType.simpleString()}" for c in df.columns])
         spark.sql(
@@ -720,7 +728,8 @@ class IcebergHelper:
     ) -> str:
         inter = cfg["runtime"]["intermediate"]
         cat, db = inter["catalog"], inter["db"]
-        tgt = f"{cat}.{db}.{schema}__{table}"
+        tbl_ident = IcebergHelper._identifier(schema, table)
+        tgt = f"{cat}.{db}.{tbl_ident}"
         IcebergHelper.setup_catalog(spark, cfg)
         if partition_col not in df_src.columns:
             df_src = df_src.withColumn(partition_col, F.to_date(F.lit(load_date), "yyyy-MM-dd"))
@@ -728,7 +737,22 @@ class IcebergHelper:
         order_cols.append(partition_col)
         df_src = IcebergHelper.dedup(df_src, pk_cols, order_cols)
         IcebergHelper.ensure_table(spark, cfg, schema, table, df_src, partition_col)
-        tgt_cols = [f.name for f in spark.table(tgt).schema.fields]
+        tgt_schema: Optional[StructType] = None
+        last_exc: Optional[Exception] = None
+        for attempt in range(5):
+            try:
+                tgt_schema = spark.table(tgt).schema
+                break
+            except (AnalysisException, ParseException) as exc:
+                last_exc = exc
+                IcebergHelper.ensure_table(spark, cfg, schema, table, df_src, partition_col)
+                if attempt < 4:
+                    time.sleep(0.5)
+        if tgt_schema is None:
+            if last_exc:
+                raise last_exc
+            raise AnalysisException(f"Unable to read schema for table {tgt}")
+        tgt_cols = [f.name for f in tgt_schema.fields]
         for c in tgt_cols:
             if c not in df_src.columns:
                 df_src = df_src.withColumn(c, F.lit(None).cast("string"))
@@ -764,7 +788,8 @@ class IcebergHelper:
         inter = cfg["runtime"]["intermediate"]
         cat, db = inter["catalog"], inter["db"]
         part_col = final_cfg.get("partition_col", "load_date")
-        ice_tbl = f"{cat}.{db}.{schema}__{table}"
+        tbl_ident = IcebergHelper._identifier(schema, table)
+        ice_tbl = f"{cat}.{db}.{tbl_ident}"
         snap_df = spark.table(ice_tbl).where(f"`{part_col}` = '{load_date}'")
         append_schema = cfg["runtime"].get("append_table_schema", False)
         base = (

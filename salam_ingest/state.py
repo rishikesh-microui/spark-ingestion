@@ -1,4 +1,5 @@
 import itertools
+import json
 import threading
 from datetime import date, datetime
 from typing import Any, Dict, Iterable, Optional, Tuple
@@ -28,6 +29,7 @@ class StateStore:
         location: Optional[str] = None,
         strategy: Optional[str] = None,
         error: Optional[str] = None,
+        extra: Optional[Dict[str, Any]] = None,
     ) -> None:
         raise NotImplementedError
 
@@ -70,6 +72,7 @@ class SingleStoreState(StateStore):
                 StructField("location", StringType(), True),
                 StructField("strategy", StringType(), True),
                 StructField("error", StringType(), True),
+                StructField("metadata_json", StringType(), True),
                 StructField("event_at", StringType(), True),
                 StructField("run_id", StringType(), True),
                 StructField("event_seq", LongType(), True),
@@ -128,6 +131,7 @@ class SingleStoreState(StateStore):
                 "location",
                 "strategy",
                 "error",
+                "metadata_json",
                 "event_at",
                 "run_id",
                 "event_seq",
@@ -146,6 +150,7 @@ class SingleStoreState(StateStore):
                 data.get("location"),
                 data.get("strategy"),
                 data.get("error"),
+                data.get("metadata_json"),
                 _now_iso_micros(),
                 RUN_ID,
                 next_event_seq(),
@@ -214,22 +219,35 @@ class SingleStoreState(StateStore):
         location: Optional[str] = None,
         strategy: Optional[str] = None,
         error: Optional[str] = None,
+        extra: Optional[Dict[str, Any]] = None,
     ) -> None:
+        payload = {
+            "schema_name": schema,
+            "table_name": table,
+            "load_date": load_date,
+            "mode": mode,
+            "phase": phase,
+            "status": status,
+            "rows_written": rows_written,
+            "watermark": watermark,
+            "location": location,
+            "strategy": strategy,
+            "error": error,
+            "metadata_json": None,
+        }
+        if extra:
+            known_keys = {"rows_written", "watermark", "location", "strategy", "error"}
+            metadata_extra: Dict[str, Any] = {}
+            for key, value in extra.items():
+                if key in known_keys:
+                    payload[key] = value
+                else:
+                    metadata_extra[key] = value
+            if metadata_extra:
+                payload["metadata_json"] = json.dumps(metadata_extra, separators=(",", ":"))
         self._write_events(
             [
-                {
-                    "schema_name": schema,
-                    "table_name": table,
-                    "load_date": load_date,
-                    "mode": mode,
-                    "phase": phase,
-                    "status": status,
-                    "rows_written": rows_written,
-                    "watermark": watermark,
-                    "location": location,
-                    "strategy": strategy,
-                    "error": error,
-                }
+                payload
             ]
         )
 
@@ -435,6 +453,7 @@ class BufferedState(StateStore):
         location: Optional[str] = None,
         strategy: Optional[str] = None,
         error: Optional[str] = None,
+        extra: Optional[Dict[str, Any]] = None,
     ) -> None:
         evt = {
             "schema_name": schema,
@@ -452,7 +471,18 @@ class BufferedState(StateStore):
             "event_seq": next(self._event_seq_ctr),
             "event_at": datetime.now().astimezone().strftime("%Y-%m-%d %H:%M:%S"),
             "sourceId": self.source_id,
+            "metadata_json": None,
         }
+        if extra:
+            known_keys = {"rows_written", "watermark", "location", "strategy", "error"}
+            metadata_extra: Dict[str, Any] = {}
+            for key, value in extra.items():
+                if key in known_keys:
+                    evt[key] = value
+                else:
+                    metadata_extra[key] = value
+            if metadata_extra:
+                evt["metadata_json"] = json.dumps(metadata_extra, separators=(",", ":"))
         if self.outbox is not None:
             try:
                 self.outbox.append_event(self.source_id, RUN_ID, evt)

@@ -5,7 +5,9 @@ from typing import Any, Dict, Tuple
 from pyspark.sql import SparkSession
 
 from .base import REGISTRY, SinkEndpoint, SourceEndpoint
-from .jdbc import JdbcEndpoint, MSSQLEndpoint, OracleEndpoint
+from .jdbc import JdbcEndpoint
+from .jdbc_mssql import MSSQLEndpoint
+from .jdbc_oracle import OracleEndpoint
 from .storage import HdfsParquetEndpoint
 
 
@@ -14,18 +16,20 @@ class EndpointFactory:
 
     @staticmethod
     def build_source(
-        spark: SparkSession,
         cfg: Dict[str, Any],
         table_cfg: Dict[str, Any],
+        tool,
     ) -> SourceEndpoint:
+        if tool is None:
+            raise ValueError("Execution tool required for source endpoint")
         jdbc_cfg = cfg.get("jdbc", {})
         dialect = (jdbc_cfg.get("dialect") or table_cfg.get("dialect") or "generic").lower()
         if dialect == "oracle":
-            endpoint = OracleEndpoint(spark, jdbc_cfg, table_cfg)
+            endpoint = OracleEndpoint(tool, jdbc_cfg, table_cfg)
         elif dialect in {"mssql", "sqlserver"}:
-            endpoint = MSSQLEndpoint(spark, jdbc_cfg, table_cfg)
+            endpoint = MSSQLEndpoint(tool, jdbc_cfg, table_cfg)
         else:
-            endpoint = JdbcEndpoint(spark, jdbc_cfg, table_cfg)
+            endpoint = JdbcEndpoint(tool, jdbc_cfg, table_cfg)
         return endpoint
 
     @staticmethod
@@ -34,18 +38,20 @@ class EndpointFactory:
         cfg: Dict[str, Any],
         table_cfg: Dict[str, Any],
     ) -> SinkEndpoint:
-        runtime = cfg["runtime"]
-        endpoint = HdfsParquetEndpoint(spark, runtime, table_cfg)
+        if spark is None:
+            raise ValueError("Spark session required for HDFS sink")
+        endpoint = HdfsParquetEndpoint(spark, cfg, table_cfg)
         return endpoint
 
     @staticmethod
     def build_endpoints(
-        spark: SparkSession,
+        tool,
+        spark,
         cfg: Dict[str, Any],
         table_cfg: Dict[str, Any],
     ) -> Tuple[SourceEndpoint, SinkEndpoint]:
         return (
-            EndpointFactory.build_source(spark, cfg, table_cfg),
+            EndpointFactory.build_source(cfg, table_cfg, tool),
             EndpointFactory.build_sink(spark, cfg, table_cfg),
         )
 

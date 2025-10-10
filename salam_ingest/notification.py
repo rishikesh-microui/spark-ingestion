@@ -2,7 +2,7 @@ import json
 import threading
 import time
 from datetime import datetime
-from typing import Any, Dict, Iterable, Optional, Set, Tuple
+from typing import Any, Dict, Iterable, Optional, Set, Tuple, Union
 
 from pyspark.sql import SparkSession
 
@@ -99,7 +99,7 @@ class Heartbeat:
         done: Optional[int] = None,
         failed: Optional[int] = None,
         inflight: Optional[int] = None,
-        active_pool: Optional[Iterable[str] | str] = None,
+        active_pool: Optional[Union[Iterable[str], str]] = None,
     ) -> None:
         if total is not None:
             self.total = total

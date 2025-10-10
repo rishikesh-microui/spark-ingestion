@@ -4,8 +4,6 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
-from pyspark.sql import SparkSession
-
 from ..endpoints.base import EndpointCapabilities, SourceEndpoint
 from .base import IngestionPlan, Planner, PlannerRequest, REGISTRY
 from .probe import RowCountProbe
@@ -16,7 +14,6 @@ class AdaptivePlanner(Planner):
 
     def build_plan(
         self,
-        spark: SparkSession,
         endpoint: SourceEndpoint,
         request: PlannerRequest,
     ) -> IngestionPlan:

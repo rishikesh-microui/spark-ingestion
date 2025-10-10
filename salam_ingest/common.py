@@ -1,7 +1,7 @@
 import json
 import threading
 from datetime import datetime
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 from pyspark.sql import DataFrame
 from pyspark.sql import functions as F
@@ -27,7 +27,7 @@ class PrintLogger:
 
     _lock = threading.Lock()
 
-    def __init__(self, job_name: str, file_path: str | None = None, level: str = "INFO") -> None:
+    def __init__(self, job_name: str, file_path: Optional[str] = None, level: str = "INFO") -> None:
         self.job = job_name
         self.file_path = file_path
         self.level = level

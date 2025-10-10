@@ -1,3 +1,5 @@
 temp-config/**
 json_params.zip
-salam_ingest/__pycache__/**
+**/__pycache__/**
+dist/
+*.zip

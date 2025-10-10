@@ -120,15 +120,6 @@
     },
     {
       "schema": "PIN01",
-      "table": "bill_t1",
-      "mode": "scd1",
-      "primary_keys": ["POID_ID0"],
-      "incremental_column": "MOD_T",
-      "incr_col_type": "epoch_seconds",
-      "initial_watermark": "0"
-    },
-    {
-      "schema": "PIN01",
       "table": "billinfo_itc_nameinfo_t",
       "mode": "full"
     },

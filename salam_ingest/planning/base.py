@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Protocol
 
-from pyspark.sql import SparkSession
-
 from ..endpoints.base import SourceEndpoint
 
 
@@ -45,7 +43,6 @@ class Probe(Protocol):
 class Planner(Protocol):
     def build_plan(
         self,
-        spark: SparkSession,
         endpoint: SourceEndpoint,
         request: PlannerRequest,
     ) -> IngestionPlan: ...

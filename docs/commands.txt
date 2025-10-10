@@ -1,0 +1,24 @@
+
+
+
+spark.conf.set("spark.sql.catalog.ice", "org.apache.iceberg.spark.SparkCatalog")
+spark.conf.set("spark.sql.catalog.ice.type", "hadoop")
+spark.conf.set("spark.sql.catalog.ice.warehouse", "hdfs:///datalake/ingestion-fm/staging/brm/intermediate/iceberg")
+spark.sql(f"CREATE NAMESPACE IF NOT EXISTS ice.staging")
+
+
+
+spark.conf.set("spark.sql.catalog.ice", "org.apache.iceberg.spark.SparkCatalog")
+spark.conf.set("spark.sql.catalog.ice.type", "hadoop")
+spark.conf.set("spark.sql.catalog.ice.warehouse", "hdfs:///datalake/miniboss_oss/intermediate/iceberg")
+spark.sql(f"CREATE NAMESPACE IF NOT EXISTS ice.staging")
+
+spark.sql("""
+  CALL ice.system.register_table(   
+    identifier => 'staging.PIN01__account_t',
+    metadata_file => 'hdfs:///datalake/ingestion-fm/staging/brm/intermediate/iceberg/staging/PIN01__account_t/metadata/v2.metadata.json'
+  )
+""")
+
+
+spark.table('ice.staging.\"PIN01__account_t\"')

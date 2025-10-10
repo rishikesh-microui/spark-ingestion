@@ -10,11 +10,19 @@ from .base import (
     EndpointCapabilities,
     EndpointRole,
     EndpointType,
-    SourceEndpoint,
+    IncrementalCommitResult,
+    IncrementalContext,
+    IngestionSlice,
     SinkEndpoint,
+    SinkFinalizeResult,
+    SinkWriteResult,
+    SourceEndpoint,
+    SliceStageResult,
 )
 from .factory import EndpointFactory
-from .jdbc import JdbcEndpoint, OracleEndpoint, MSSQLEndpoint
+from .jdbc import JdbcEndpoint
+from .jdbc_mssql import MSSQLEndpoint
+from .jdbc_oracle import OracleEndpoint
 from .storage import HdfsParquetEndpoint
 
 __all__ = [
@@ -23,9 +31,15 @@ __all__ = [
     "EndpointRole",
     "EndpointType",
     "HdfsParquetEndpoint",
+    "IncrementalCommitResult",
+    "IncrementalContext",
+    "IngestionSlice",
     "JdbcEndpoint",
     "MSSQLEndpoint",
     "OracleEndpoint",
     "SinkEndpoint",
+    "SinkFinalizeResult",
+    "SinkWriteResult",
     "SourceEndpoint",
+    "SliceStageResult",
 ]
