@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import asdict
 from typing import Any, Dict, List, Optional
 
 from ..tools.base import ExecutionTool, QueryRequest
@@ -18,6 +19,7 @@ class JdbcEndpoint(SourceEndpoint):
         jdbc_cfg: Dict[str, Any],
         table_cfg: Dict[str, Any],
         metadata_access=None,
+        emitter=None,
     ) -> None:
         self.tool = tool
         self.jdbc_cfg = dict(jdbc_cfg)
@@ -27,6 +29,7 @@ class JdbcEndpoint(SourceEndpoint):
         self.incremental_column = table_cfg.get("incremental_column")
         self.base_from_sql = self._build_from_sql()
         self.metadata_access = metadata_access
+        self.emitter = emitter
         guardrail_cfg = (self.table_cfg.get("metadata_guardrails") or {}).get("precision")
         if not guardrail_cfg and metadata_access is not None:
             defaults = getattr(metadata_access, "guardrail_defaults", {}) or {}
@@ -188,6 +191,22 @@ class JdbcEndpoint(SourceEndpoint):
         )
         if result.status in {"metadata_missing", "metadata_unusable"}:
             return None
+        if self.emitter and result.status in {"adjusted", "fatal"}:
+            from ..events.types import Event, EventCategory, EventType
+
+            details = {
+                "schema": self.schema,
+                "table": self.table,
+                "status": result.status,
+                "issues": [asdict(issue) for issue in result.issues],
+                "cast_specs": {name: asdict(spec) for name, spec in result.cast_specs.items()},
+                "config": {
+                    "max_precision": self._precision_guardrail_max,
+                    "violation_action": self._precision_guardrail_violation_action,
+                    "open_precision_action": self._precision_guardrail_open_action,
+                },
+            }
+            self.emitter.emit(Event(category=EventCategory.GUARDRAIL, type=EventType.GUARDRAIL_PRECISION, payload=details))
         if result.status == "fatal":
             issues = "; ".join(f"{issue.column}: {issue.reason}" for issue in result.issues if not issue.handled)
             raise ValueError(

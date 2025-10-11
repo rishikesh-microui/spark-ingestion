@@ -12,8 +12,15 @@ class OracleEndpoint(JdbcEndpoint):
 
     DIALECT = "oracle"
 
-    def __init__(self, tool, jdbc_cfg: Dict[str, Any], table_cfg: Dict[str, Any], metadata_access=None) -> None:
-        super().__init__(tool, jdbc_cfg, table_cfg, metadata_access=metadata_access)
+    def __init__(
+        self,
+        tool,
+        jdbc_cfg: Dict[str, Any],
+        table_cfg: Dict[str, Any],
+        metadata_access=None,
+        emitter=None,
+    ) -> None:
+        super().__init__(tool, jdbc_cfg, table_cfg, metadata_access=metadata_access, emitter=emitter)
         self._caps.supports_metadata = True
         self._metadata = OracleMetadataSubsystem(self)
 

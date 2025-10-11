@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional
 
 from salam_ingest.common import PrintLogger
+from salam_ingest.events import emit_log
 from salam_ingest.endpoints import EndpointFactory
 from salam_ingest.endpoints.base import MetadataCapableEndpoint
 from salam_ingest.metadata.cache import MetadataCacheConfig, MetadataCacheManager
@@ -60,10 +61,10 @@ def collect_metadata(
     metadata_service = MetadataCollectionService(service_cfg, cache_manager, logger)
 
     if not cache_manager.cfg.enabled:
-        logger.info("metadata_collection_disabled")
+        emit_log(None, level="INFO", msg="metadata_collection_disabled", logger=logger)
         return
     if tool is None:
-        logger.warn("metadata_collection_skipped", reason="no_execution_tool")
+        emit_log(None, level="WARN", msg="metadata_collection_skipped", reason="no_execution_tool", logger=logger)
         return
 
     jobs: List[MetadataJob] = []
@@ -71,18 +72,24 @@ def collect_metadata(
         try:
             endpoint = EndpointFactory.build_source(cfg, tbl, tool)
         except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warn(
-                "metadata_endpoint_build_failed",
+            emit_log(
+                None,
+                level="WARN",
+                msg="metadata_endpoint_build_failed",
                 schema=tbl.get("schema"),
                 dataset=tbl.get("table"),
                 error=str(exc),
+                logger=logger,
             )
             continue
         if not isinstance(endpoint, MetadataCapableEndpoint):
-            logger.info(
-                "metadata_capability_missing",
+            emit_log(
+                None,
+                level="INFO",
+                msg="metadata_capability_missing",
                 schema=tbl.get("schema"),
                 dataset=tbl.get("table"),
+                logger=logger,
             )
             continue
         namespace = safe_upper(str(tbl.get("schema") or tbl.get("namespace") or default_namespace))
@@ -96,7 +103,7 @@ def collect_metadata(
     try:
         metadata_service.run(jobs)
     except Exception as exc:  # pragma: no cover - defensive logging
-        logger.warn("metadata_collection_failed", error=str(exc))
+        emit_log(None, level="WARN", msg="metadata_collection_failed", error=str(exc), logger=logger)
 
 
 @dataclass

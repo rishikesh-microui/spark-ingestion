@@ -44,6 +44,12 @@
             "enabled": true,
             "db": "brm_dl_ing"
         },
+        "logging": {
+            "level": "INFO",
+            "emit_structured": true,
+            "event_sink": "outbox",
+            "stacktrace": "hash"
+        },
         "state_backend": "singlestore",
         "state": {
             "singlestore": {

@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List
 from pyspark.sql import SparkSession
 
 from ..common import RUN_ID
+from ..events import emit_log
 from ..storage.filesystem import Filesystem
 
 
@@ -87,6 +88,6 @@ class HDFSOutbox:
                     else:
                         base_state._write_progress(rows)
                     self.delete(path)
-                    logger.info("outbox_replayed", kind=kind, file=path, rows=len(rows))
+                    emit_log(None, level="INFO", msg="outbox_replayed", kind=kind, file=path, rows=len(rows), logger=logger)
                 except Exception as exc:
-                    logger.error("outbox_replay_failed", kind=kind, file=path, err=str(exc))
+                    emit_log(None, level="ERROR", msg="outbox_replay_failed", kind=kind, file=path, err=str(exc), logger=logger)

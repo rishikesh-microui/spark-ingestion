@@ -5,6 +5,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 from pyspark.sql import SparkSession
 
 from .io.filesystem import HDFSOutbox
+from .events import emit_log
 from .notification import Heartbeat
 from .staging import TimeAwareBufferedSink
 from .state import BufferedState, SingleStoreState
@@ -41,8 +42,11 @@ def suggest_singlestore_ddl(logger, cfg: Dict[str, Any]) -> None:
     events = ss["eventsTable"]
     wm = ss["watermarksTable"]
     db = ss["database"]
-    logger.info(
-        "singlestore_recommended_ddl",
+    emit_log(
+        emitter=None,
+        level="INFO",
+        msg="singlestore_recommended_ddl",
+        logger=logger,
         events=f"ALTER TABLE {db}.{events} ADD COLUMN IF NOT EXISTS ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP;",
         wm=(
             f"ALTER TABLE {db}.{wm} ADD COLUMN IF NOT EXISTS updated_at "
@@ -68,7 +72,7 @@ def build_state_components(
     spark: SparkSession,
     cfg: Dict[str, Any],
     logger,
-) -> Tuple[BufferedState, Optional[TimeAwareBufferedSink]]:
+) -> Tuple[BufferedState, Optional[TimeAwareBufferedSink], Optional[HDFSOutbox]]:
     runtime = cfg["runtime"]
     backend = runtime.get("state_backend", "singlestore")
     if backend != "singlestore":
@@ -95,7 +99,7 @@ def build_state_components(
         time_sink=sink,
         logger=logger,
     )
-    return state, sink
+    return state, sink, outbox
 
 
 def build_heartbeat(logger, cfg: Dict[str, Any], sink: Optional[TimeAwareBufferedSink], args) -> Heartbeat:

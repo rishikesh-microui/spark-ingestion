@@ -86,3 +86,18 @@ def emit_state_watermark(
         )
     else:
         state.set_progress(schema, table, watermark, last_loaded_date)
+
+
+def emit_log(
+    emitter,
+    *,
+    level: str,
+    msg: str,
+    logger=None,
+    **payload: Any,
+) -> None:
+    record = {"level": level.upper(), "msg": msg, **payload}
+    if emitter is not None:
+        emitter.emit(Event(category=EventCategory.LOG, type=EventType.LOG, payload=record))
+    elif logger is not None:
+        logger.log(level.upper(), msg, **payload)

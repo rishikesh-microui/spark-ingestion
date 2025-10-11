@@ -13,6 +13,11 @@ class EventCategory(str, Enum):
     PLAN = "plan"
     TOOL = "tool"
     DEBUG = "debug"
+    INGEST = "ingest"
+    GUARDRAIL = "guardrail"
+    HEARTBEAT = "heartbeat"
+    NOTIFY = "notify"
+    LOG = "log"
 
 
 class EventType(str, Enum):
@@ -25,6 +30,14 @@ class EventType(str, Enum):
     PLAN_ADAPT = "plan.adapt"
     TOOL_PROGRESS = "tool.progress"
     DEBUG_INFO = "debug.info"
+    INGEST_TABLE_START = "ingest.table.start"
+    INGEST_TABLE_SUCCESS = "ingest.table.success"
+    INGEST_TABLE_FAILURE = "ingest.table.failure"
+    INGEST_SLICE_PROGRESS = "ingest.slice.progress"
+    GUARDRAIL_PRECISION = "guardrail.precision"
+    HEARTBEAT_STATUS = "heartbeat.status"
+    NOTIFY_EVENT = "notify.event"
+    LOG = "log"
 
 
 @dataclass

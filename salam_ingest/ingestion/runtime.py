@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
+import hashlib
+import time
 import traceback
 from typing import Any, Dict, List, Tuple
 
 from salam_ingest.common import PrintLogger, RUN_ID
 from salam_ingest.endpoints import EndpointFactory
-from salam_ingest.events import Event, EventCategory, EventType
+from salam_ingest.events import Event, EventCategory, EventType, emit_log
 from salam_ingest.planning import AdaptivePlanner, PlannerRequest
 from salam_ingest.planning.base import REGISTRY as PLANNER_REGISTRY
 from salam_ingest.strategies import STRATEGY_REGISTRY
@@ -33,13 +35,25 @@ def _ingest_one_table(
         group_id=f"ingest::{schema}.{table}",
         description=f"Ingest {schema}.{table}",
     )
-    logger.info(
-        "table_start",
+    emit_log(
+        context.emitter,
+        level="INFO",
+        msg="table_start",
         schema=schema,
         table=table,
         mode=mode,
         pool=pool_name,
         load_date=load_date,
+        logger=logger,
+    )
+    context.emit_event(
+        EventCategory.INGEST,
+        EventType.INGEST_TABLE_START,
+        schema=schema,
+        table=table,
+        mode=mode,
+        load_date=load_date,
+        pool=pool_name,
     )
     if context.emitter is not None:
         context.emitter.emit(
@@ -55,7 +69,13 @@ def _ingest_one_table(
                 },
             )
         )
-    source_ep, sink_ep = EndpointFactory.build_endpoints(tool, cfg, tbl, metadata=context.metadata_access)
+    source_ep, sink_ep = EndpointFactory.build_endpoints(
+        tool,
+        cfg,
+        tbl,
+        metadata=context.metadata_access,
+        emitter=context.emitter,
+    )
     try:
         planner = PLANNER_REGISTRY.get("default")
     except KeyError:
@@ -76,6 +96,7 @@ def _ingest_one_table(
     if strategy is None:
         raise ValueError(f"Unsupported mode: {mode}")
     try:
+        start_ts = time.time()
         result = strategy.run(
             context,
             cfg,
@@ -85,6 +106,20 @@ def _ingest_one_table(
             sink_ep,
             planner,
             planner_request,
+        )
+        duration = time.time() - start_ts
+        rows = None
+        if isinstance(result, dict):
+            rows = result.get("rows") or result.get("rows_written")
+        context.emit_event(
+            EventCategory.INGEST,
+            EventType.INGEST_TABLE_SUCCESS,
+            schema=schema,
+            table=table,
+            mode=mode,
+            load_date=load_date,
+            rows=rows,
+            duration_sec=duration,
         )
         if context.emitter is not None:
             context.emitter.emit(
@@ -102,6 +137,21 @@ def _ingest_one_table(
                 )
             )
         return result
+    except Exception as exc:
+        stack = traceback.format_exc()
+        stack_hash = hashlib.sha1(stack.encode("utf-8")).hexdigest()[:10]
+        context.emit_event(
+            EventCategory.INGEST,
+            EventType.INGEST_TABLE_FAILURE,
+            schema=schema,
+            table=table,
+            mode=mode,
+            load_date=load_date,
+            error_type=type(exc).__name__,
+            message=str(exc),
+            error_hash=stack_hash,
+        )
+        raise
     finally:
         tool.clear_job_context()
 
@@ -131,27 +181,21 @@ def run_ingestion(
             try:
                 res = fut.result()
                 results.append(res)
-                logger.info("table_done", table=key, result="ok")
-                notifier.emit("INFO", {"event": "table_done", "table": key})
+                emit_log(context.emitter, level="INFO", msg="table_done", table=key, result="ok", logger=logger)
                 heartbeat.update(done=len(results), inflight=len(futmap) - len(results) - len(errors))
             except Exception as exc:  # pragma: no cover - defensive logging
                 stacktrace = traceback.format_exc()
                 errors.append((key, str(exc)))
                 heartbeat.update(failed=len(errors), inflight=len(futmap) - len(results) - len(errors))
-                notifier_payload = {
-                    "event": "table_failed",
-                    "table": key,
-                    "error": str(exc),
-                    "error_type": type(exc).__name__,
-                    "stacktrace": stacktrace,
-                }
-                notifier.emit("ERROR", notifier_payload)
-                logger.error(
-                    "table_failed",
+                emit_log(
+                    context.emitter,
+                    level="ERROR",
+                    msg="table_failed",
                     table=key,
                     error=str(exc),
                     error_type=type(exc).__name__,
                     stacktrace=stacktrace,
+                    logger=logger,
                 )
                 if context.emitter is not None:
                     context.emitter.emit(
@@ -165,5 +209,4 @@ def run_ingestion(
                             },
                         )
                     )
-    notifier.emit("INFO", {"event": "job_summary", "ok": len(results), "err": len(errors), "run_id": RUN_ID})
     return results, errors

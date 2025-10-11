@@ -4,7 +4,13 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from .common import PrintLogger
-from .events import Emitter, StateEventSubscriber
+from .events import (
+    Emitter,
+    StateEventSubscriber,
+    StructuredLogSubscriber,
+    NotifierSubscriber,
+    emit_log,
+)
 from .notification import Notifier
 from .strategies import ExecutionContext
 from .orchestrator_helpers import (
@@ -34,13 +40,27 @@ def main(
     if spark is None:
         raise RuntimeError("Execution tool must expose a Spark session for current ingestion strategies")
     logger.spark = spark  # help heartbeat expose spark stats if desired
-    state, sink = build_state_components(spark, cfg, logger)
+    state, sink, outbox = build_state_components(spark, cfg, logger)
     emitter = Emitter()
     emitter.subscribe(StateEventSubscriber(state))
     tables = filter_tables(cfg["tables"], getattr(args, "only_tables", None))
     collect_metadata(cfg, tables, tool, logger)
     metadata_access = build_metadata_access(cfg, logger)
-    context = ExecutionContext(spark, emitter, tool, metadata_access=metadata_access)
+    logging_cfg = cfg.get("runtime", {}).get("logging", {})
+    structured_logger = StructuredLogSubscriber(
+        logger,
+        job_name=cfg.get("runtime", {}).get("job_name", "ingest"),
+        emit_structured=bool(logging_cfg.get("emit_structured", True)),
+        event_sink=str(logging_cfg.get("event_sink", "outbox")).lower(),
+        outbox=outbox,
+    )
+    emitter.subscribe(structured_logger)
+    context = ExecutionContext(
+        spark,
+        emitter,
+        tool,
+        metadata_access=metadata_access,
+    )
     hb = build_heartbeat(logger, cfg, sink, args)
     notifier = Notifier(
         spark,
@@ -48,18 +68,19 @@ def main(
         cfg,
         interval_sec=int(getattr(args, "notify_interval_seconds", 300)),
     )
+    emitter.subscribe(NotifierSubscriber(notifier))
     notifier.start()
     hb.update(total=len(tables))
     hb.start()
     if not tables:
-        logger.warn("no_tables_to_run")
+        emit_log(context.emitter, level="WARN", msg="no_tables_to_run", logger=logger)
         return
     load_date = getattr(args, "load_date", None) or datetime.now().astimezone().strftime("%Y-%m-%d")
     state.preload(spark, tables, load_date)
-    logger.info("job_start", tables=len(tables), load_date=load_date)
+    emit_log(context.emitter, level="INFO", msg="job_start", tables=len(tables), load_date=load_date, logger=logger)
     results, errors = run_ingestion(context, cfg, state, logger, tables, load_date, hb, notifier)
     state.flush()
-    logger.info("job_end", ok=len(results), err=len(errors))
+    emit_log(context.emitter, level="INFO", msg="job_end", ok=len(results), err=len(errors), logger=logger)
     summarize_run(results, errors)
     hb.stop()
     notifier.stop()

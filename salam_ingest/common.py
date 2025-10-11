@@ -62,6 +62,11 @@ class PrintLogger:
     def error(self, msg: str, **kv: Any) -> None:
         self.log("ERROR", msg, **kv)
 
+    def event(self, event: str, level: str = "INFO", **kv: Any) -> None:
+        kv = dict(kv)
+        kv.setdefault("event", event)
+        self.log(level, event, **kv)
+
 
 def with_ingest_cols(df: DataFrame) -> DataFrame:
     """Augment a dataframe with standard ingestion columns."""

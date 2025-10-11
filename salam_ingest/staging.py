@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, Optional
 from pyspark.sql import SparkSession
 
 from .common import PrintLogger
+from .events import emit_log
 from .io.filesystem import HDFSOutbox, HDFSUtil
 
 
@@ -85,10 +86,10 @@ class Staging:
                 if Staging.exists(spark, f"{dstr}/_SUCCESS") and Staging.exists(spark, f"{dstr}/_LANDED"):
                     age = now_ms - fs.getFileStatus(d).getModificationTime()
                     if age > ttl_ms:
-                        logger.info("staging_ttl_delete", path=dstr)
+                        emit_log(None, level="INFO", msg="staging_ttl_delete", path=dstr, logger=logger)
                         fs.delete(d, True)
         except Exception as exc:
-            logger.warn("staging_ttl_cleanup_failed", err=str(exc))
+            emit_log(None, level="WARN", msg="staging_ttl_cleanup_failed", err=str(exc), logger=logger)
 
 
 class TimeAwareBufferedSink:
@@ -154,10 +155,10 @@ class TimeAwareBufferedSink:
             if path:
                 self.outbox.delete(path)
             self._last_events_flush_ts = time.time()
-            self.logger.info("sink_flush_events_ok", reason=reason, rows=len(batch))
+            emit_log(None, level="INFO", msg="sink_flush_events_ok", reason=reason, rows=len(batch), logger=self.logger)
         except Exception as exc:
             self._events_buf[:0] = batch
-            self.logger.error("sink_flush_events_failed", reason=reason, err=str(exc), rows=len(batch))
+            emit_log(None, level="ERROR", msg="sink_flush_events_failed", reason=reason, err=str(exc), rows=len(batch), logger=self.logger)
 
     def _flush_progress_nolock(self, reason: str) -> None:
         if not self._progress_buf:
@@ -172,7 +173,7 @@ class TimeAwareBufferedSink:
             if path:
                 self.outbox.delete(path)
             self._last_progress_flush_ts = time.time()
-            self.logger.info("sink_flush_progress_ok", reason=reason, rows=len(batch))
+            emit_log(None, level="INFO", msg="sink_flush_progress_ok", reason=reason, rows=len(batch), logger=self.logger)
         except Exception as exc:
             self._progress_buf[:0] = batch
-            self.logger.error("sink_flush_progress_failed", reason=reason, err=str(exc), rows=len(batch))
+            emit_log(None, level="ERROR", msg="sink_flush_progress_failed", reason=reason, err=str(exc), rows=len(batch), logger=self.logger)

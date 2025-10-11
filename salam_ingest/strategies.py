@@ -15,7 +15,8 @@ from .planning.base import Planner, PlannerRequest
 from .io.paths import Paths
 from .common import Utils
 from .tools.base import ExecutionTool
-from .events import emit_state_mark, emit_state_watermark
+from .events import emit_state_mark, emit_state_watermark, emit_log
+from .events.types import EventCategory, EventType
 
 
 class ExecutionContext:
@@ -32,6 +33,13 @@ class ExecutionContext:
         self.emitter = emitter
         self.tool = tool
         self.metadata_access = metadata_access
+
+    def emit_event(self, category, event_type, **payload):
+        if self.emitter is None:
+            return
+        from .events.types import Event
+
+        self.emitter.emit(Event(category=category, type=event_type, payload=payload))
 
     def read_full(self, source: SourceEndpoint) -> Any:
         if self.tool is None:
@@ -81,7 +89,16 @@ class FullRefreshStrategy:
         raw_dir, final_dir, _ = Paths.build(rt, schema, table, load_date)
 
         status = state.get_day_status(schema, table, load_date)
-        logger.info("full_status", schema=schema, table=table, **status, load_date=load_date)
+        context.emit_event(
+            EventCategory.LOG,
+            EventType.LOG,
+            level="INFO",
+            msg="full_status",
+            schema=schema,
+            table=table,
+            load_date=load_date,
+            **status,
+        )
         if status.get("finalized_done"):
             emit_state_mark(
                 context,
@@ -105,12 +122,28 @@ class FullRefreshStrategy:
                 status="skipped",
                 location=final_dir,
             )
-            logger.info("full_skip_finalized", schema=schema, table=table, load_date=load_date)
+            context.emit_event(
+                EventCategory.LOG,
+                EventType.LOG,
+                level="INFO",
+                msg="full_skip_finalized",
+                schema=schema,
+                table=table,
+                load_date=load_date,
+            )
             return {"table": f"{schema}.{table}", "skipped": True, "reason": "already finalized today"}
 
         result: Dict[str, Any]
         if status.get("raw_done") and not status.get("finalized_done"):
-            logger.info("full_finalize_only", schema=schema, table=table, raw_dir=raw_dir)
+            context.emit_event(
+                EventCategory.LOG,
+                EventType.LOG,
+                level="INFO",
+                msg="full_finalize_only",
+                schema=schema,
+                table=table,
+                raw_dir=raw_dir,
+            )
             result = {"table": f"{schema}.{table}", "mode": "full", "raw": raw_dir}
             rows = None
         else:
@@ -149,7 +182,16 @@ class FullRefreshStrategy:
                 location=write_result.path,
                 extra=write_result.event_payload,
             )
-            logger.info("full_raw_written", schema=schema, table=table, rows=rows, raw_dir=write_result.path)
+            context.emit_event(
+                EventCategory.LOG,
+                EventType.LOG,
+                level="INFO",
+                msg="full_raw_written",
+                schema=schema,
+                table=table,
+                rows=rows,
+                raw_dir=write_result.path,
+            )
             result = {"table": f"{schema}.{table}", "mode": "full", "rows": rows, "raw": write_result.path}
             result.update({k: v for k, v in write_result.event_payload.items() if k not in result})
 
@@ -183,8 +225,11 @@ class FullRefreshStrategy:
                 strategy=rt.get("finalize_strategy"),
                 extra=finalize_result.event_payload,
             )
-            logger.info(
-                "full_finalized",
+            context.emit_event(
+                EventCategory.LOG,
+                EventType.LOG,
+                level="INFO",
+                msg="full_finalized",
                 schema=schema,
                 table=table,
                 final_dir=final_dir,
@@ -204,7 +249,15 @@ class FullRefreshStrategy:
                 location=final_dir,
                 error=str(exc),
             )
-            logger.error("full_finalize_failed", schema=schema, table=table, err=str(exc))
+            context.emit_event(
+                EventCategory.LOG,
+                EventType.LOG,
+                level="ERROR",
+                msg="full_finalize_failed",
+                schema=schema,
+                table=table,
+                error=str(exc),
+            )
             raise
         return result
 
@@ -235,7 +288,17 @@ class Scd1Strategy:
         pk_cols = list(tbl_cfg.get("primary_keys", []))
 
         last_wm, last_ld = state.get_progress(schema, table, default_wm=initial_wm, default_date="1900-01-01")
-        logger.info("scd1_progress", schema=schema, table=table, wm=last_wm, last_ld=last_ld, load_date=load_date)
+        emit_log(
+            context.emitter,
+            level="INFO",
+            msg="scd1_progress",
+            schema=schema,
+            table=table,
+            wm=last_wm,
+            last_ld=last_ld,
+            load_date=load_date,
+            logger=logger,
+        )
 
         incr_type = (tbl_cfg.get("incr_col_type") or "").lower()
         lag = int(tbl_cfg.get("lag_seconds", cfg["runtime"].get("wm_lag_seconds", 0)))
@@ -246,13 +309,16 @@ class Scd1Strategy:
         else:
             eff_wm = Utils.minus_seconds_datetime(last_wm, lag)
         is_int_epoch = incr_type in ("int", "integer", "bigint", "epoch", "epoch_seconds", "epoch_millis")
-        logger.info(
-            "scd1_effective_wm",
+        emit_log(
+            context.emitter,
+            level="INFO",
+            msg="scd1_effective_wm",
             schema=schema,
             table=table,
             last_wm=last_wm,
             lag_seconds=lag,
             effective_wm=eff_wm,
+            logger=logger,
         )
 
         request.last_watermark = eff_wm
@@ -261,7 +327,15 @@ class Scd1Strategy:
             {"lower": eff_wm, "upper": plan.metadata.get("now_literal")}
         ]  # type: ignore[arg-type]
         ingestion_slices = [IngestionSlice(lower=s["lower"], upper=s.get("upper")) for s in plan_slices]
-        logger.info("scd1_planned_slices", schema=schema, table=table, n=len(ingestion_slices))
+        emit_log(
+            context.emitter,
+            level="INFO",
+            msg="scd1_planned_slices",
+            schema=schema,
+            table=table,
+            n=len(ingestion_slices),
+            logger=logger,
+        )
 
         incremental_ctx = IncrementalContext(
             schema=schema,
@@ -286,23 +360,29 @@ class Scd1Strategy:
                 slice_info=slice_obj,
             )
             if stage_result.skipped:
-                logger.info(
-                    "slice_skip_found_success",
+                emit_log(
+                    context.emitter,
+                    level="INFO",
+                    msg="slice_skip_found_success",
                     schema=schema,
                     table=table,
                     lo=slice_obj.lower,
                     hi=slice_obj.upper,
                     path=stage_result.path,
+                    logger=logger,
                 )
             else:
-                logger.info(
-                    "slice_staged",
+                emit_log(
+                    context.emitter,
+                    level="INFO",
+                    msg="slice_staged",
                     schema=schema,
                     table=table,
                     lo=slice_obj.lower,
                     hi=slice_obj.upper,
                     path=stage_result.path,
                     rows=stage_result.rows,
+                    logger=logger,
                 )
             staged_results.append(stage_result)
 
@@ -360,7 +440,15 @@ class Scd1Strategy:
                 status="failed",
                 error=str(exc),
             )
-            logger.error("scd1_intermediate_failed", schema=schema, table=table, err=str(exc))
+            emit_log(
+                context.emitter,
+                level="ERROR",
+                msg="scd1_intermediate_failed",
+                schema=schema,
+                table=table,
+                error=str(exc),
+                logger=logger,
+            )
             raise
 
         emit_state_mark(
@@ -398,12 +486,15 @@ class Scd1Strategy:
             last_loaded_date=commit_result.new_loaded_date,
             extra=commit_result.additional_metadata,
         )
-        logger.info(
-            "scd1_wm_advanced",
+        emit_log(
+            context.emitter,
+            level="INFO",
+            msg="scd1_wm_advanced",
             schema=schema,
             table=table,
             new_wm=commit_result.new_watermark,
             new_ld=commit_result.new_loaded_date,
+            logger=logger,
         )
 
         result = {
