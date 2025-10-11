@@ -1,0 +1,93 @@
+{
+  "version": "20240405123000",
+  "source": "oracle",
+  "schema": "HR",
+  "name": "EMPLOYEES",
+  "data_source": {
+    "id": "HRPRD",
+    "name": "HRPRD",
+    "type": "oracle",
+    "system": "oracle-prod-cluster",
+    "environment": "AVAILABLE",
+    "version": "19c",
+    "properties": {
+      "probe_sequence": ["instance", "version_banner"]
+    }
+  },
+  "dataset": {
+    "id": "HR.EMPLOYEES",
+    "name": "HR.EMPLOYEES",
+    "physical_name": "HR.EMPLOYEES",
+    "type": "table",
+    "source_id": "HRPRD",
+    "location": "HR.EMPLOYEES",
+    "description": "Employee master data",
+    "properties": {
+      "stale_stats": "NO",
+      "sample_size": 107
+    }
+  },
+  "environment": {
+    "database_version": "19.17.0.0.0",
+    "probe_sequence": ["instance", "version_banner"]
+  },
+  "schema_fields": [
+    {
+      "name": "EMPLOYEE_ID",
+      "data_type": "NUMBER",
+      "precision": 10,
+      "scale": 0,
+      "nullable": false,
+      "position": 1,
+      "statistics": {
+        "distinct_count": 107,
+        "null_count": 0,
+        "last_analyzed": "2024-04-05T06:00:00+00:00"
+      }
+    },
+    {
+      "name": "FIRST_NAME",
+      "data_type": "VARCHAR2",
+      "length": 20,
+      "nullable": true,
+      "position": 2
+    }
+  ],
+  "statistics": {
+    "record_count": 107,
+    "storage_blocks": 12,
+    "average_record_size": 56,
+    "sample_size": 107,
+    "last_profiled_at": "2024-04-05T06:00:00+00:00",
+    "stale": "NO"
+  },
+  "constraints": [
+    {
+      "name": "EMPLOYEES_PK",
+      "constraint_type": "P",
+      "status": "ENABLED",
+      "fields": [
+        {
+          "field": "EMPLOYEE_ID",
+          "position": 1
+        }
+      ]
+    }
+  ],
+  "processes": [],
+  "ownerships": [],
+  "relationships": {
+    "dataset_to_source": [
+      {
+        "dataset": "HR.EMPLOYEES",
+        "data_source": "HRPRD"
+      }
+    ],
+    "dataset_fields": [
+      {
+        "dataset": "HR.EMPLOYEES",
+        "fields": ["EMPLOYEE_ID", "FIRST_NAME"]
+      }
+    ]
+  }
+}

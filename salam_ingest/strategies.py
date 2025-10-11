@@ -12,7 +12,8 @@ from .endpoints.base import (
     SliceStageResult,
 )
 from .planning.base import Planner, PlannerRequest
-from .io import Paths, Utils
+from .io.paths import Paths
+from .common import Utils
 from .tools.base import ExecutionTool
 from .events import emit_state_mark, emit_state_watermark
 

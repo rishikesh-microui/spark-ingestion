@@ -6,8 +6,8 @@ from typing import Any, Dict, Iterable, Optional, Set, Tuple, Union
 
 from pyspark.sql import SparkSession
 
-from .common import PrintLogger, RUN_ID
-from .io import HDFSUtil
+from .common import PrintLogger, RUN_ID, Utils
+from .io.filesystem import HDFSUtil
 
 
 class Notifier:
@@ -118,8 +118,6 @@ class Heartbeat:
     def _run(self) -> None:
         while not self._stop.wait(self.interval):
             try:
-                from .io import Utils  # Local import to avoid circular dependency
-
                 snap = Utils.sample_spark(self.logger.spark) if hasattr(self.logger, "spark") else {}
             except Exception:
                 snap = {}

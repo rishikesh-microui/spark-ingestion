@@ -5,6 +5,8 @@ from enum import Enum, auto
 from typing import Any, Dict, Iterable, List, Optional, Protocol, Tuple, TYPE_CHECKING, runtime_checkable
 
 if TYPE_CHECKING:
+    from pyspark.sql import DataFrame
+    from ..metadata.core import CatalogSnapshot
     from ..tools.base import ExecutionTool
 
 
@@ -32,6 +34,7 @@ class EndpointCapabilities:
     supports_watermark: bool = False
     supports_staging: bool = False
     supports_merge: bool = False
+    supports_metadata: bool = False
     incremental_literal: str = "timestamp"  # timestamp | epoch
     default_fetchsize: int = 10000
     event_metadata_keys: Tuple[str, ...] = ()
@@ -175,6 +178,29 @@ class SinkEndpoint(BaseEndpoint, Protocol):
 class DataEndpoint(SourceEndpoint, SinkEndpoint, Protocol):
     """Endpoints that support both source and sink operations."""
     ...
+
+
+@runtime_checkable
+class MetadataSubsystem(Protocol):
+    """Metadata subsystem implemented by capable source endpoints."""
+
+    def probe_environment(self, *, config: Dict[str, Any]) -> Dict[str, Any]: ...
+
+    def collect_snapshot(
+        self,
+        *,
+        config: Dict[str, Any],
+        environment: Dict[str, Any],
+    ) -> "CatalogSnapshot": ...
+
+    def capabilities(self) -> Dict[str, Any]: ...
+
+
+@runtime_checkable
+class MetadataCapableEndpoint(SourceEndpoint, Protocol):
+    """Source endpoints that expose a metadata subsystem."""
+
+    def metadata_subsystem(self) -> MetadataSubsystem: ...
 
 
 class EndpointRegistry:

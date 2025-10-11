@@ -23,7 +23,7 @@ from .factory import EndpointFactory
 from .jdbc import JdbcEndpoint
 from .jdbc_mssql import MSSQLEndpoint
 from .jdbc_oracle import OracleEndpoint
-from .storage import HdfsParquetEndpoint
+from .hdfs import HdfsParquetEndpoint
 
 __all__ = [
     "EndpointCapabilities",

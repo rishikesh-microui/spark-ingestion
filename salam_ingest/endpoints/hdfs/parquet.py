@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
+from pyspark.sql.functions import col, lit, to_timestamp
 
-from .base import (
+from ...common import RUN_ID
+from ...io.filesystem import HDFSUtil
+from ...io.paths import Paths
+from ...staging import Staging
+from ..base import (
     EndpointCapabilities,
     IncrementalCommitResult,
     IncrementalContext,
@@ -17,9 +22,30 @@ from .base import (
     SinkWriteResult,
     SliceStageResult,
 )
-from ..common import RUN_ID
-from ..io import HiveHelper, IcebergHelper, RawIO, HDFSUtil
-from ..staging import Staging
+from .warehouse import HiveHelper, IcebergHelper
+
+
+def _load_raw_increment_df(
+    spark: SparkSession,
+    runtime_cfg: Dict[str, Any],
+    schema: str,
+    table: str,
+    last_ld: str,
+    last_wm: str,
+    incr_col: str,
+    incr_type: str = "",
+) -> DataFrame:
+    _, _, base_raw = Paths.build(runtime_cfg, schema, table, "")
+    all_raw = spark.read.format(runtime_cfg.get("write_format", "parquet")).load(base_raw)
+    if incr_col.lower() not in [c.lower() for c in all_raw.columns]:
+        return all_raw.limit(0)
+    df = all_raw.where(col("load_date") >= lit(last_ld))
+    incr_type = (incr_type or "").lower()
+    if incr_type.startswith("epoch") or incr_type in ("bigint", "int", "numeric", "decimal"):
+        df = df.where(col(incr_col).cast("long") > F.lit(int(str(last_wm))))
+    else:
+        df = df.where(to_timestamp(col(incr_col)) > to_timestamp(lit(last_wm)))
+    return df
 
 
 class HdfsParquetEndpoint(SinkEndpoint):
@@ -29,11 +55,11 @@ class HdfsParquetEndpoint(SinkEndpoint):
         self.spark = spark
         self.cfg = cfg
         self.runtime_cfg = cfg["runtime"]
-        self.table_cfg = table_cfg
+        self.table_cfg = dict(table_cfg)
         self.schema = table_cfg["schema"]
         self.table = table_cfg["table"]
-        self.load_date = None
-        self.raw_dir, self.final_dir, self.base_raw = self._build_paths("")
+        self.load_date: Optional[str] = None
+        self.base_raw = Paths.build(self.runtime_cfg, self.schema, self.table, "")[2]
         self._caps = EndpointCapabilities(
             supports_write=True,
             supports_finalize=True,
@@ -44,11 +70,12 @@ class HdfsParquetEndpoint(SinkEndpoint):
             event_metadata_keys=("location", "hive_table"),
         )
 
+    # ------------------------------------------------------------------ SinkEndpoint protocol
     def configure(self, table_cfg: Dict[str, Any]) -> None:
         self.table_cfg.update(table_cfg)
         self.schema = self.table_cfg["schema"]
         self.table = self.table_cfg["table"]
-        self.raw_dir, self.final_dir, self.base_raw = self._build_paths(self.load_date or "")
+        self.base_raw = Paths.build(self.runtime_cfg, self.schema, self.table, "")[2]
 
     def capabilities(self) -> EndpointCapabilities:
         return self._caps
@@ -64,17 +91,24 @@ class HdfsParquetEndpoint(SinkEndpoint):
         rows: Optional[int] = None,
     ) -> SinkWriteResult:
         self.load_date = load_date
-        raw_dir, _, _ = self._build_paths(load_date)
+        raw_dir, _, _ = self._paths_for(load_date)
         if rows is None:
             rows = df.count()
-        (df.write.format(self.runtime_cfg.get("write_format", "parquet"))
-         .mode(mode)
-         .option("compression", self.runtime_cfg.get("compression", "snappy"))
-         .save(raw_dir))
-        # write metrics
-        metrics = {"schema": schema, "table": table, "run_id": RUN_ID, "rows_written": rows,
-                   "status": "success", "phase": "raw", "load_date": load_date}
-        from ..io import HDFSUtil  # local import to avoid cycle
+        (
+            df.write.format(self.runtime_cfg.get("write_format", "parquet"))
+            .mode(mode)
+            .option("compression", self.runtime_cfg.get("compression", "snappy"))
+            .save(raw_dir)
+        )
+        metrics = {
+            "schema": schema,
+            "table": table,
+            "run_id": RUN_ID,
+            "rows_written": rows,
+            "status": "success",
+            "phase": "raw",
+            "load_date": load_date,
+        }
         HDFSUtil.write_text(
             spark=self.spark,
             path=f"{raw_dir}/_METRICS.json",
@@ -90,8 +124,7 @@ class HdfsParquetEndpoint(SinkEndpoint):
         schema: str,
         table: str,
     ) -> SinkFinalizeResult:
-        _, final_dir, _ = self._build_paths(load_date)
-        raw_dir, _, _ = self._build_paths(load_date)
+        raw_dir, final_dir, _ = self._paths_for(load_date)
         rt = self.runtime_cfg
         hive_table = None
         if rt.get("finalize_strategy") == "hive_set_location" and rt.get("hive", {}).get("enabled", False):
@@ -161,11 +194,12 @@ class HdfsParquetEndpoint(SinkEndpoint):
             )
 
         rows = df.count()
-        (df.write
-         .format(self.runtime_cfg.get("write_format", "parquet"))
-         .mode("overwrite")
-         .option("compression", self.runtime_cfg.get("compression", "snappy"))
-         .save(slice_path))
+        (
+            df.write.format(self.runtime_cfg.get("write_format", "parquet"))
+            .mode("overwrite")
+            .option("compression", self.runtime_cfg.get("compression", "snappy"))
+            .save(slice_path)
+        )
         Staging.write_text(
             self.spark,
             f"{slice_path}/_RANGE.json",
@@ -188,7 +222,7 @@ class HdfsParquetEndpoint(SinkEndpoint):
         context: IncrementalContext,
         staged_slices: List[SliceStageResult],
     ) -> IncrementalCommitResult:
-        raw_dir, _, _ = self._build_paths(load_date)
+        raw_dir, _, _ = self._paths_for(load_date)
         active_slices = [s for s in staged_slices if not s.skipped]
         if not active_slices:
             return IncrementalCommitResult(
@@ -231,11 +265,12 @@ class HdfsParquetEndpoint(SinkEndpoint):
                 )
                 additional_metadata.update(mirror_info)
 
-        (window_df.write
-         .format(read_format)
-         .mode("append")
-         .option("compression", self.runtime_cfg.get("compression", "snappy"))
-         .save(raw_dir))
+        (
+            window_df.write.format(read_format)
+            .mode("append")
+            .option("compression", self.runtime_cfg.get("compression", "snappy"))
+            .save(raw_dir)
+        )
 
         metrics = {
             "schema": schema,
@@ -252,7 +287,7 @@ class HdfsParquetEndpoint(SinkEndpoint):
         for slice_result in active_slices:
             Staging.mark_landed(self.spark, slice_result.path)
 
-        raw_to_merge = RawIO.raw_increment_df(
+        raw_to_merge = _load_raw_increment_df(
             self.spark,
             self.runtime_cfg,
             schema,
@@ -262,7 +297,9 @@ class HdfsParquetEndpoint(SinkEndpoint):
             context.incremental_column,
             context.incremental_type,
         )
-        new_wm, new_ld = IcebergHelper._compute_wm_ld(raw_to_merge, context.incremental_column, context.is_epoch)
+        new_wm, new_ld = IcebergHelper._compute_wm_ld(
+            raw_to_merge, context.incremental_column, context.is_epoch
+        )
 
         raw_event_payload = {"rows_written": total_rows}
         additional_metadata.setdefault("staged_slices", len(active_slices))
@@ -287,7 +324,7 @@ class HdfsParquetEndpoint(SinkEndpoint):
         hive_cfg = self.runtime_cfg.get("hive", {})
         if not hive_cfg.get("enabled", False):
             return {"status": "disabled"}
-        final_dir = self._build_paths(load_date)[1]
+        final_dir = self._paths_for(load_date)[1]
         hive_db = hive_cfg["db"]
         HiveHelper.create_unpartitioned_parquet_if_absent_with_schema(
             self.spark,
@@ -316,22 +353,6 @@ class HdfsParquetEndpoint(SinkEndpoint):
         except Exception:
             return None
 
-    # helper utilities -----------------------------------------------------------
-    def _build_paths(self, load_date: str):
-        append_schema = self.runtime_cfg.get("append_table_schema", False)
-        raw_dir = (
-            f"{self.runtime_cfg['raw_root']}/{self.schema}/{self.table}/load_date={load_date}"
-            if append_schema
-            else f"{self.runtime_cfg['raw_root']}/{self.table}/load_date={load_date}"
-        )
-        final_dir = (
-            f"{self.runtime_cfg['final_root']}/{self.schema}/{self.table}"
-            if append_schema
-            else f"{self.runtime_cfg['final_root']}/{self.table}"
-        )
-        base_raw = (
-            f"{self.runtime_cfg['raw_root']}/{self.schema}/{self.table}"
-            if append_schema
-            else f"{self.runtime_cfg['raw_root']}/{self.table}"
-        )
-        return raw_dir, final_dir, base_raw
+    # ------------------------------------------------------------------ helpers
+    def _paths_for(self, load_date: str) -> Tuple[str, str, str]:
+        return Paths.build(self.runtime_cfg, self.schema, self.table, load_date)

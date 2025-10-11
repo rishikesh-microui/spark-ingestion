@@ -2,13 +2,11 @@ from __future__ import annotations
 
 from typing import Any, Dict, Tuple
 
-from pyspark.sql import SparkSession
-
 from .base import REGISTRY, SinkEndpoint, SourceEndpoint
+from .hdfs import HdfsParquetEndpoint
 from .jdbc import JdbcEndpoint
 from .jdbc_mssql import MSSQLEndpoint
 from .jdbc_oracle import OracleEndpoint
-from .storage import HdfsParquetEndpoint
 
 
 class EndpointFactory:
@@ -34,25 +32,25 @@ class EndpointFactory:
 
     @staticmethod
     def build_sink(
-        spark: SparkSession,
+        tool,
         cfg: Dict[str, Any],
         table_cfg: Dict[str, Any],
     ) -> SinkEndpoint:
+        spark = getattr(tool, "spark", None)
         if spark is None:
-            raise ValueError("Spark session required for HDFS sink")
+            raise ValueError("Execution tool must expose a Spark session for HDFS sinks")
         endpoint = HdfsParquetEndpoint(spark, cfg, table_cfg)
         return endpoint
 
     @staticmethod
     def build_endpoints(
         tool,
-        spark,
         cfg: Dict[str, Any],
         table_cfg: Dict[str, Any],
     ) -> Tuple[SourceEndpoint, SinkEndpoint]:
         return (
             EndpointFactory.build_source(cfg, table_cfg, tool),
-            EndpointFactory.build_sink(spark, cfg, table_cfg),
+            EndpointFactory.build_sink(tool, cfg, table_cfg),
         )
 
 

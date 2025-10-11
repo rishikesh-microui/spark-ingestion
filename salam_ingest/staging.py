@@ -8,7 +8,7 @@ from typing import Any, Dict, Iterable, Optional
 from pyspark.sql import SparkSession
 
 from .common import PrintLogger
-from .io import HDFSOutbox, HDFSUtil
+from .io.filesystem import HDFSOutbox, HDFSUtil
 
 
 class Staging:

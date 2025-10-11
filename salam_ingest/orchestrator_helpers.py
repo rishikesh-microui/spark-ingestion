@@ -4,7 +4,7 @@ from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from pyspark.sql import SparkSession
 
-from .io import HDFSOutbox
+from .io.filesystem import HDFSOutbox
 from .notification import Heartbeat
 from .staging import TimeAwareBufferedSink
 from .state import BufferedState, SingleStoreState

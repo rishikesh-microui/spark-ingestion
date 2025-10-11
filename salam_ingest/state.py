@@ -560,4 +560,4 @@ class BufferedState(StateStore):
                 self.logger.error("progress_flush_failed", err=str(exc), rows=len(batch))
 
 
-from .io import HDFSOutbox  # noqa: E402
+from .io.filesystem import HDFSOutbox  # noqa: E402
