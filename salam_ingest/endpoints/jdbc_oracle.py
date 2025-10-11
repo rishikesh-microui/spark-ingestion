@@ -12,8 +12,8 @@ class OracleEndpoint(JdbcEndpoint):
 
     DIALECT = "oracle"
 
-    def __init__(self, tool, jdbc_cfg: Dict[str, Any], table_cfg: Dict[str, Any]) -> None:
-        super().__init__(tool, jdbc_cfg, table_cfg)
+    def __init__(self, tool, jdbc_cfg: Dict[str, Any], table_cfg: Dict[str, Any], metadata_access=None) -> None:
+        super().__init__(tool, jdbc_cfg, table_cfg, metadata_access=metadata_access)
         self._caps.supports_metadata = True
         self._metadata = OracleMetadataSubsystem(self)
 
@@ -35,3 +35,6 @@ class OracleEndpoint(JdbcEndpoint):
         return self._metadata
 
     # --- Metadata collection ----------------------------------------------------
+
+    def _cast_type_keyword(self) -> str:
+        return "NUMBER"

@@ -13,6 +13,18 @@ from .model import (
     SchemaField,
     SchemaFieldStatistics,
 )
+from .interfaces import (
+    MetadataContext,
+    MetadataConsumer,
+    MetadataProducer,
+    MetadataQuery,
+    MetadataRecord,
+    MetadataRepository,
+    MetadataRequest,
+    MetadataTransformer,
+)
+from .engine import MetadataProducerRunner, ProducerRunResult
+from .repository import JsonFileMetadataRepository
 
 __all__ = [
     "MetadataTarget",
@@ -26,4 +38,15 @@ __all__ = [
     "OwnershipAssignment",
     "SchemaField",
     "SchemaFieldStatistics",
+    "MetadataContext",
+    "MetadataConsumer",
+    "MetadataProducer",
+    "MetadataQuery",
+    "MetadataRecord",
+    "MetadataRepository",
+    "MetadataRequest",
+    "MetadataTransformer",
+    "MetadataProducerRunner",
+    "ProducerRunResult",
+    "JsonFileMetadataRepository",
 ]

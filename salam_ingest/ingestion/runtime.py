@@ -55,7 +55,7 @@ def _ingest_one_table(
                 },
             )
         )
-    source_ep, sink_ep = EndpointFactory.build_endpoints(tool, cfg, tbl)
+    source_ep, sink_ep = EndpointFactory.build_endpoints(tool, cfg, tbl, metadata=context.metadata_access)
     try:
         planner = PLANNER_REGISTRY.get("default")
     except KeyError:

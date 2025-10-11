@@ -17,17 +17,18 @@ class EndpointFactory:
         cfg: Dict[str, Any],
         table_cfg: Dict[str, Any],
         tool,
+        metadata=None,
     ) -> SourceEndpoint:
         if tool is None:
             raise ValueError("Execution tool required for source endpoint")
         jdbc_cfg = cfg.get("jdbc", {})
         dialect = (jdbc_cfg.get("dialect") or table_cfg.get("dialect") or "generic").lower()
         if dialect == "oracle":
-            endpoint = OracleEndpoint(tool, jdbc_cfg, table_cfg)
+            endpoint = OracleEndpoint(tool, jdbc_cfg, table_cfg, metadata_access=metadata)
         elif dialect in {"mssql", "sqlserver"}:
-            endpoint = MSSQLEndpoint(tool, jdbc_cfg, table_cfg)
+            endpoint = MSSQLEndpoint(tool, jdbc_cfg, table_cfg, metadata_access=metadata)
         else:
-            endpoint = JdbcEndpoint(tool, jdbc_cfg, table_cfg)
+            endpoint = JdbcEndpoint(tool, jdbc_cfg, table_cfg, metadata_access=metadata)
         return endpoint
 
     @staticmethod
@@ -47,9 +48,10 @@ class EndpointFactory:
         tool,
         cfg: Dict[str, Any],
         table_cfg: Dict[str, Any],
+        metadata=None,
     ) -> Tuple[SourceEndpoint, SinkEndpoint]:
         return (
-            EndpointFactory.build_source(cfg, table_cfg, tool),
+            EndpointFactory.build_source(cfg, table_cfg, tool, metadata=metadata),
             EndpointFactory.build_sink(tool, cfg, table_cfg),
         )
 

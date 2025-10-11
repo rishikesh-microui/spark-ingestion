@@ -26,20 +26,19 @@ class MSSQLEndpoint(JdbcEndpoint):
     def _count_query(self, lower: str, upper: Optional[str]) -> str:
         col = self.incremental_column
         base = self.base_from_sql
-        predicate = f"{self._column(col)} > {self._literal(lower)}"
+        col_identifier = self._column_identifier(col) if col else None
+        if not col_identifier:
+            raise ValueError("incremental column required for count query")
+        predicate = f"{col_identifier} > {self._literal(lower)}"
         if upper is not None:
-            predicate += f" AND {self._column(col)} <= {self._literal(upper)}"
+            predicate += f" AND {col_identifier} <= {self._literal(upper)}"
         return f"(SELECT COUNT_BIG(1) AS CNT FROM {base} WHERE {predicate}) c"
 
-    def _dbtable_for_range(self, lower: str, upper: Optional[str]) -> str:
-        col = self.incremental_column
-        cols = self.table_cfg.get("cols", "*")
-        if isinstance(cols, list):
-            cols = ", ".join(cols)
-        predicate = f"{self._column(col)} > {self._literal(lower)}"
-        if upper is not None:
-            predicate += f" AND {self._column(col)} <= {self._literal(upper)}"
-        return f"(SELECT {cols} FROM {self.base_from_sql} WHERE {predicate}) t"
+    def _column_identifier(self, name: str) -> str:
+        return self._column(name)
+
+    def _column_alias(self, column: str) -> str:
+        return self._column(column)
 
     @staticmethod
     def _column(name: str) -> str:

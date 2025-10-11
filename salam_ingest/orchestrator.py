@@ -19,7 +19,7 @@ from .state import BufferedState
 from .tools.base import ExecutionTool
 from .tools.spark import SparkTool
 from .staging import Staging
-from .metadata import collect_metadata
+from .metadata import collect_metadata, build_metadata_access
 from .ingestion import run_ingestion
 
 def main(
@@ -37,9 +37,10 @@ def main(
     state, sink = build_state_components(spark, cfg, logger)
     emitter = Emitter()
     emitter.subscribe(StateEventSubscriber(state))
-    context = ExecutionContext(spark, emitter, tool)
     tables = filter_tables(cfg["tables"], getattr(args, "only_tables", None))
     collect_metadata(cfg, tables, tool, logger)
+    metadata_access = build_metadata_access(cfg, logger)
+    context = ExecutionContext(spark, emitter, tool, metadata_access=metadata_access)
     hb = build_heartbeat(logger, cfg, sink, args)
     notifier = Notifier(
         spark,

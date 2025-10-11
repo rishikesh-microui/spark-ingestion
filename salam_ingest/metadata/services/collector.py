@@ -6,8 +6,7 @@ from typing import Any, Dict, List
 from salam_ingest.common import PrintLogger
 from salam_ingest.endpoints.base import MetadataCapableEndpoint
 from salam_ingest.metadata.cache import MetadataCacheManager
-from salam_ingest.metadata.core import MetadataTarget
-from salam_ingest.metadata.utils import to_serializable
+from salam_ingest.metadata.core import MetadataProducerRunner, MetadataTarget
 
 
 @dataclass
@@ -23,12 +22,13 @@ class MetadataJob:
 
 
 class MetadataCollectionService:
-    """Orchestrate metadata collection using metadata subsystems."""
+    """Coordinate metadata collection jobs by delegating to the metadata engine."""
 
     def __init__(self, config: MetadataServiceConfig, cache: MetadataCacheManager, logger: PrintLogger) -> None:
         self.config = config
         self.cache = cache
         self.logger = logger
+        self.runner = MetadataProducerRunner(cache, config.endpoint_defaults)
 
     def run(self, jobs: List[MetadataJob]) -> None:
         if not self.cache.cfg.enabled:
@@ -44,8 +44,7 @@ class MetadataCollectionService:
                 self.cache.record_hit(target)
                 continue
 
-            caps = endpoint.capabilities()
-            if not getattr(caps, "supports_metadata", False) or not isinstance(endpoint, MetadataCapableEndpoint):
+            if not isinstance(endpoint, MetadataCapableEndpoint):
                 self.logger.info(
                     "metadata_capability_missing",
                     namespace=target.namespace,
@@ -62,79 +61,75 @@ class MetadataCollectionService:
                 )
                 continue
 
-            subsystem = endpoint.metadata_subsystem()
-            endpoint_cfg = self._build_endpoint_config(endpoint, artifact, subsystem)
-            try:
-                environment = subsystem.probe_environment(config=endpoint_cfg)
-            except Exception as exc:
-                self.logger.warn(
-                    "metadata_environment_probe_failed",
+            result = self.runner.execute(endpoint, artifact, target)
+            producer_id = result.producer_id or getattr(endpoint, "DIALECT", None) or "unknown"
+
+            if result.reason == "producer_unavailable":
+                self.logger.info(
+                    "metadata_producer_missing",
                     namespace=target.namespace,
                     entity=target.entity,
-                    error=str(exc),
                 )
-                environment = {}
+                continue
+            if result.reason == "unsupported_target":
+                self.logger.info(
+                    "metadata_target_unsupported",
+                    namespace=target.namespace,
+                    entity=target.entity,
+                    producer=producer_id,
+                )
+                continue
+            if result.reason == "capability_missing":
+                self.logger.info(
+                    "metadata_capability_missing",
+                    namespace=target.namespace,
+                    entity=target.entity,
+                    dialect=getattr(endpoint, "DIALECT", None) or endpoint.describe().get("dialect"),
+                )
+                continue
 
-            self.logger.info(
-                "metadata_collect_start",
-                namespace=target.namespace,
-                entity=target.entity,
-            )
-            try:
-                snapshot = subsystem.collect_snapshot(config=endpoint_cfg, environment=environment)
-            except Exception as exc:
+            if result.started:
+                self.logger.info(
+                    "metadata_collect_start",
+                    namespace=target.namespace,
+                    entity=target.entity,
+                    producer=producer_id,
+                )
+
+            if result.error:
                 self.logger.warn(
                     "metadata_collect_error",
                     namespace=target.namespace,
                     entity=target.entity,
-                    error=str(exc),
+                    producer=producer_id,
+                    error=result.error,
                 )
                 continue
 
-            snapshot_dict = to_serializable(snapshot)
-            endpoint_desc = endpoint.describe()
-            snapshot_dict.update(
-                {
-                    "schema": snapshot_dict.get("schema", target.namespace),
-                    "name": snapshot_dict.get("name", target.entity),
-                    "namespace": target.namespace,
-                    "entity": target.entity,
-                    "endpoint": endpoint_desc,
-                    "quality_flags": artifact.get("quality_flags", {}),
-                    "artifact_config": artifact,
-                    "metadata_config": endpoint_cfg,
-                }
-            )
-            self.cache.persist(target, snapshot_dict)
+            if result.probe_error:
+                self.logger.warn(
+                    "metadata_environment_probe_failed",
+                    namespace=target.namespace,
+                    entity=target.entity,
+                    producer=producer_id,
+                    error=result.probe_error,
+                )
+
+            if result.stored > 0:
+                self.logger.info(
+                    "metadata_collect_success",
+                    namespace=target.namespace,
+                    entity=target.entity,
+                    producer=producer_id,
+                    records=result.stored,
+                )
+                continue
+
+            reason = result.reason or "no_records"
             self.logger.info(
-                "metadata_collect_success",
+                "metadata_collect_noop",
                 namespace=target.namespace,
                 entity=target.entity,
+                producer=producer_id,
+                reason=reason,
             )
-
-    def _build_endpoint_config(
-        self,
-        endpoint: MetadataCapableEndpoint,
-        artifact_cfg: Dict[str, Any],
-        subsystem,
-    ) -> Dict[str, Any]:
-        cfg: Dict[str, Any] = {}
-        defaults = self.config.endpoint_defaults.get("default")
-        if isinstance(defaults, dict):
-            cfg.update(defaults)
-        dialect = getattr(endpoint, "DIALECT", None) or endpoint.describe().get("dialect")
-        if dialect:
-            dialect_cfg = self.config.endpoint_defaults.get(str(dialect).lower())
-            if isinstance(dialect_cfg, dict):
-                cfg.update(dialect_cfg)
-        artifact_meta = artifact_cfg.get("metadata")
-        if isinstance(artifact_meta, dict):
-            cfg.update(artifact_meta)
-        if hasattr(subsystem, "capabilities"):
-            try:
-                caps = subsystem.capabilities()
-            except Exception:  # pragma: no cover - defensive
-                caps = None
-            if isinstance(caps, dict):
-                cfg.setdefault("capabilities", caps)
-        return cfg

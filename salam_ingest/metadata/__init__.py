@@ -16,7 +16,8 @@ from .core import (
 from .normalizers import MetadataNormalizer, OracleMetadataNormalizer
 from .adapters import OracleMetadataSubsystem
 from .services import MetadataCollectionService, MetadataServiceConfig, MetadataJob
-from .runtime import collect_metadata
+from .consumers import PrecisionGuardrailEvaluator, PrecisionGuardrailResult, PrecisionIssue, PrecisionSpec
+from .runtime import collect_metadata, build_metadata_access, MetadataAccess
 from .cache import MetadataCacheConfig, MetadataCacheManager
 
 __all__ = [
@@ -30,6 +31,12 @@ __all__ = [
     "MetadataJob",
     "MetadataTarget",
     "collect_metadata",
+    "build_metadata_access",
+    "MetadataAccess",
+    "PrecisionGuardrailEvaluator",
+    "PrecisionGuardrailResult",
+    "PrecisionIssue",
+    "PrecisionSpec",
     "CatalogSnapshot",
     "SchemaField",
     "SchemaFieldStatistics",

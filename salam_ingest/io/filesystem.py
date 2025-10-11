@@ -8,6 +8,7 @@ from typing import Any, Dict, Iterable, List
 from pyspark.sql import SparkSession
 
 from ..common import RUN_ID
+from ..storage.filesystem import Filesystem
 
 
 class HDFSUtil:
@@ -15,31 +16,13 @@ class HDFSUtil:
 
     @staticmethod
     def write_text(spark: SparkSession, path: str, content: str) -> None:
-        jsc = spark._jsc
-        jvm = spark.sparkContext._jvm
-        conf = jsc.hadoopConfiguration()
-        p = jvm.org.apache.hadoop.fs.Path(path)
-        fs = p.getFileSystem(conf)
-        if fs.exists(p):
-            fs.delete(p, True)
-        out = fs.create(p)
-        try:
-            out.write(bytearray(content.encode("utf-8")))
-        finally:
-            out.close()
+        fs, target = Filesystem.for_path(path, spark)
+        fs.write_text(target, content)
 
     @staticmethod
     def append_text(spark: SparkSession, path: str, content: str) -> None:
-        jsc = spark._jsc
-        jvm = spark.sparkContext._jvm
-        conf = jsc.hadoopConfiguration()
-        p = jvm.org.apache.hadoop.fs.Path(path)
-        fs = p.getFileSystem(conf)
-        out = fs.create(p, True) if not fs.exists(p) else fs.append(p)
-        try:
-            out.write(bytearray(content.encode("utf-8")))
-        finally:
-            out.close()
+        fs, target = Filesystem.for_path(path, spark)
+        fs.append_text(target, content)
 
 
 class HDFSOutbox:
@@ -47,41 +30,26 @@ class HDFSOutbox:
 
     def __init__(self, spark: SparkSession, root: str) -> None:
         self.spark = spark
-        self.root = root.rstrip("/")
-        self.jsc = spark._jsc
-        self.jvm = spark.sparkContext._jvm
-        self.conf = self.jsc.hadoopConfiguration()
-        self.Path = self.jvm.org.apache.hadoop.fs.Path
-        self.fs = self.jvm.org.apache.hadoop.fs.FileSystem.get(self.conf)
+        self.fs, resolved_root = Filesystem.for_path(root, spark)
+        self.root = resolved_root.rstrip("/")
         for sub in ("events", "progress"):
-            p = self.Path(f"{self.root}/{sub}")
-            if not self.fs.exists(p):
-                self.fs.mkdirs(p)
+            self.fs.makedirs(self.fs.join(self.root, sub))
 
     def _atomic_write(self, path: str, content_bytes: bytes) -> None:
-        p_tmp = self.Path(path + ".__tmp__")
-        p = self.Path(path)
-        if self.fs.exists(p_tmp):
-            self.fs.delete(p_tmp, True)
-        out = self.fs.create(p_tmp, True)
-        try:
-            out.write(content_bytes)
-        finally:
-            out.close()
-        if self.fs.exists(p):
-            self.fs.delete(p, True)
-        if not self.fs.rename(p_tmp, p):
-            raise RuntimeError(f"Atomic rename failed for {path}")
+        tmp_path = f"{path}.__tmp__"
+        self.fs.write_bytes(tmp_path, content_bytes)
+        if self.fs.exists(path):
+            self.fs.delete(path)
+        self.fs.rename(tmp_path, path)
 
     def _delete(self, path: str) -> None:
-        p = self.Path(path)
-        if self.fs.exists(p):
-            self.fs.delete(p, False)
+        if self.fs.exists(path):
+            self.fs.delete(path)
 
     def mirror_batch(self, kind: str, records: Iterable[Dict[str, Any]]) -> str:
         ts = datetime.now().astimezone().strftime("%Y%m%d-%H%M%S.%f")
         name = f"{kind}_{RUN_ID}_{ts}_{uuid.uuid4().hex}.jsonl"
-        path = f"{self.root}/{kind}/{name}"
+        path = self.fs.join(self.root, kind, name)
         payload = "\n".join(json.dumps(r, separators=(",", ":")) for r in records)
         self._atomic_write(path, payload.encode("utf-8"))
         return path
@@ -95,14 +63,12 @@ class HDFSOutbox:
         return self.mirror_batch("progress", [record])
 
     def list_pending(self, kind: str) -> List[str]:
-        base = f"{self.root}/{kind}"
-        it = self.fs.listStatus(self.Path(base))
-        out = []
-        for status in it:
-            p = status.getPath().toString()
-            if p.endswith(".jsonl"):
-                out.append(p)
-        return sorted(out)
+        base = self.fs.join(self.root, kind)
+        entries = []
+        for name in self.fs.listdir(base):
+            if name.endswith(".jsonl"):
+                entries.append(self.fs.join(base, name))
+        return sorted(entries)
 
     def read_jsonl(self, path: str) -> List[Dict[str, Any]]:
         df = self.spark.read.json(path)

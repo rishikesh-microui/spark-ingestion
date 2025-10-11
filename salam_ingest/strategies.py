@@ -26,10 +26,12 @@ class ExecutionContext:
         spark: Optional[SparkSession] = None,
         emitter=None,
         tool: Optional[ExecutionTool] = None,
+        metadata_access=None,
     ) -> None:
         self.spark = spark
         self.emitter = emitter
         self.tool = tool
+        self.metadata_access = metadata_access
 
     def read_full(self, source: SourceEndpoint) -> Any:
         if self.tool is None:

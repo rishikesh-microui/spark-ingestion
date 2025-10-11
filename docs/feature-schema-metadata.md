@@ -28,6 +28,41 @@ Architecture Overview
 - Client Libraries: Utilities inside `salam_ingest` to read cached metadata, detect drift, and feed planners or ingestion pipelines. Future work exposes the same artifacts over gRPC while keeping file-path access for lightweight consumers.
 - Observability: Structured logs and metrics (count of refreshed tables, TTL misses, diff summaries) so operators trust the system.
 
+Interaction Interfaces
+- `MetadataContext` captures execution context (source, job/run identifiers, namespace) and travels with every metadata interaction so audit trails remain intact.
+- Producers implement the `MetadataProducer` protocol (`capabilities`, `supports`, `produce`) and return one or more `MetadataRecord` envelopes describing the `kind` of metadata they emit (schema, stats, lineage, etc.).
+- Produced records are written through a `MetadataRepository`, which abstracts persistence via `store`, `bulk_store`, `latest`, `history`, and ad-hoc `query` capabilities.
+- Optional `MetadataTransformer` hooks can normalize or enrich records before storage/serving when additional business rules are needed.
+- Consumers (planners, query builders, governance tools) conform to the `MetadataConsumer` protocol and express `requirements` before `consume` is invoked with the subset of records they need.
+- `MetadataRequest` is the hand-off between orchestrator/service layers and producers, combining the target artifact, table configuration, and context flags (e.g., explicit refresh).
+- `MetadataQuery` provides a structured way for consumers to look up metadata without relying on repository internals; it supports filtering by target, kind, history depth, and arbitrary filters.
+
+Consumer Access Patterns
+- Metadata consumer SDK exposes `MetadataRepository` implementations (JSON cache today, pluggable DB later) along with scenario-specific helpers.
+- `JsonFileMetadataRepository` wraps the cache manager index for read-only lookup (`latest`, `history`, `query`). Multi-tenant deployments can swap in an object-store or SQL-backed repository without touching consumers.
+- Consumers pull `MetadataRecord` envelopes and feed them into domain-specific evaluators such as `PrecisionGuardrailEvaluator`, `PartitionSizingAdvisor`, or `FreshnessMonitor`.
+- Evaluators return structured results (`PrecisionGuardrailResult` envelopes) that can be emitted as events, logged, or short-circuit ingestion tasks.
+- Result statuses are `ok`, `adjusted`, or `fatal`; only the last one halts ingestion, while `adjusted` indicates casts or scale clipping were applied automatically.
+- Consumer interfaces stay symmetrical with producers: they accept `MetadataContext`, express requirements, and operate on `MetadataRecord` collections without caring about the underlying storage.
+- Table configs can opt into guardrails via:
+
+```json
+{
+  "metadata_guardrails": {
+    "precision": {
+      "enabled": true,
+      "max_precision": 38,
+      "violation_action": "downcast",
+      "open_precision_action": "downcast",
+      "fallback_precision": 38,
+      "fallback_scale": 6
+    }
+  }
+}
+```
+
+`violation_action` controls how declared precision exceeding the limit is handled (`downcast` or `fail`), and `open_precision_action` governs columns without explicit precision. The ingestion endpoints fetch metadata through the repository and apply casts before submitting queries to Spark when precision rules are enabled. Violations marked as `fail` halt ingestion; `downcast` rewrites the projection so the sink receives values within supported bounds.
+
 Operational Model
 - Metadata collection runs as its own pipeline stage; orchestrator coordinates execution windows and retries without blocking ingestion SLAs.
 - Ingestion, transformation, or planner jobs treat metadata as an optional dependency: they consult cached versions when present and fall back to existing logic otherwise.
@@ -75,7 +110,7 @@ Versioning & Diffing
 - Store diff summaries (e.g., columns added/removed, min/max shifts) for audit trails and alerts.
 
 Integration Use Cases
-- Precision Guardrails: Ingestion reads column metadata to automatically apply casts (e.g., Oracle NUMBER -> Spark Decimal 38) or escalate when max observed precision exceeds 38.
+- Precision Guardrails: `PrecisionGuardrailEvaluator` queries metadata via the repository, scans numeric columns for precision > 38 (configurable) or undefined precision, and returns structured issues; ingestion uses this to apply casts (when bounded) or halt with actionable messages.
 - Query Planning: Batch planners use row counts, partitions, and histograms to size Spark partitions, choose broadcast vs shuffle joins, and skip redundant `count(*)`.
 - Data Freshness Monitoring: Compare `last_analyzed` vs ingestion time to detect stale source statistics; alert if thresholds exceeded.
 - Data Quality Rules: Tag high-null or highly skewed columns for targeted validation or sampling. Flag default values meaning missing data.

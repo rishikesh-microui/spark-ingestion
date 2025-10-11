@@ -1,14 +1,16 @@
 from __future__ import annotations
 
 import json
-import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
+
+from pyspark.sql import SparkSession
 
 from salam_ingest.common import PrintLogger
 from salam_ingest.metadata.core import MetadataTarget
 from salam_ingest.metadata.utils import to_serializable
+from salam_ingest.storage.filesystem import Filesystem
 
 
 @dataclass
@@ -20,30 +22,35 @@ class MetadataCacheConfig:
 
 
 class MetadataCacheManager:
-    def __init__(self, cfg: MetadataCacheConfig, logger: PrintLogger) -> None:
+    def __init__(
+        self,
+        cfg: MetadataCacheConfig,
+        logger: PrintLogger,
+        spark: Optional[SparkSession] = None,
+    ) -> None:
         self.cfg = cfg
         self.logger = logger
-        self.root = os.path.abspath(cfg.cache_path)
-        self.source_root = os.path.join(self.root, cfg.source_id)
-        self.index_path = os.path.join(self.source_root, "catalog_index.json")
-        os.makedirs(self.source_root, exist_ok=True)
+        self._fs = Filesystem.for_root(cfg.cache_path, spark)
+        self.root = self._fs.root
+        self.source_root = self._fs.join(self.root, cfg.source_id)
+        self.index_path = self._fs.join(self.source_root, "catalog_index.json")
+        self._fs.makedirs(self.source_root)
         self._index = self._load_index()
 
     def _load_index(self) -> Dict[str, Any]:
-        if not os.path.exists(self.index_path):
+        if not self._fs.exists(self.index_path):
             return {}
         try:
-            with open(self.index_path, "r", encoding="utf-8") as handle:
-                return json.load(handle)
-        except Exception as exc:  # pragma: no cover - defensive path
+            data = self._fs.read_text(self.index_path)
+            return json.loads(data)
+        except Exception as exc:  # pragma: no cover - defensive
             self.logger.warn("metadata_index_load_failed", path=self.index_path, error=str(exc))
             return {}
 
     def _save_index(self) -> None:
         tmp_path = f"{self.index_path}.tmp"
-        with open(tmp_path, "w", encoding="utf-8") as handle:
-            json.dump(self._index, handle, ensure_ascii=False, indent=2)
-        os.replace(tmp_path, self.index_path)
+        self._fs.write_text(tmp_path, json.dumps(self._index, ensure_ascii=False, indent=2))
+        self._fs.replace(tmp_path, self.index_path)
 
     def _key(self, target: MetadataTarget) -> str:
         return f"{target.namespace.lower()}::{target.entity.lower()}"
@@ -52,8 +59,8 @@ class MetadataCacheManager:
         return value.lower().replace("/", "_")
 
     def artifact_dir(self, target: MetadataTarget) -> str:
-        path = os.path.join(self.source_root, self._sanitize(target.namespace), self._sanitize(target.entity))
-        os.makedirs(path, exist_ok=True)
+        path = self._fs.join(self.source_root, self._sanitize(target.namespace), self._sanitize(target.entity))
+        self._fs.makedirs(path)
         return path
 
     def needs_refresh(self, target: MetadataTarget) -> bool:
@@ -61,8 +68,8 @@ class MetadataCacheManager:
         entry = self._index.get(key)
         if not entry:
             return True
-        path = os.path.join(self.source_root, entry["path"])
-        if not os.path.exists(path):
+        path = self._fs.join(self.source_root, entry["path"])
+        if not self._fs.exists(path):
             return True
         expires_at = entry.get("expires_at")
         if not expires_at:
@@ -84,7 +91,7 @@ class MetadataCacheManager:
             "metadata_cache_hit",
             namespace=target.namespace,
             entity=target.entity,
-            cache_path=os.path.join(self.source_root, entry["path"]),
+            cache_path=self._fs.join(self.source_root, entry["path"]),
         )
 
     def persist(self, target: MetadataTarget, payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -98,9 +105,9 @@ class MetadataCacheManager:
             "expires_at": expires_at.isoformat(),
         }
         dataset_path = self.artifact_dir(target)
-        file_path = os.path.join(dataset_path, f"{version}.json")
-        with open(file_path, "w", encoding="utf-8") as handle:
-            json.dump(to_serializable(record), handle, ensure_ascii=False, indent=2)
+        file_path = self._fs.join(dataset_path, f"{version}.json")
+        self._fs.write_text(file_path, json.dumps(to_serializable(record), ensure_ascii=False, indent=2))
+
         key = self._key(target)
         self._index[key] = {
             "namespace": target.namespace,
@@ -108,7 +115,7 @@ class MetadataCacheManager:
             "version": version,
             "collected_at": record["collected_at"],
             "expires_at": record["expires_at"],
-            "path": os.path.relpath(file_path, self.source_root),
+            "path": self._fs.relpath(file_path, self.source_root),
         }
         self._save_index()
         self.logger.info(
