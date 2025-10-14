@@ -1,378 +1,356 @@
 {
-    "jdbc": {
-        "url": "jdbc:oracle:thin:@//PRBRMDBscan:1525/BRMDB",
-        "user": "ISCC_BIGDATA",
-        "password": "IsCbigData12p",
-        "driver": "oracle.jdbc.OracleDriver",
-        "fetchsize": 10000,
-        "dialect": "oracle",
-        "default_num_partitions": 8
-    },
+  "jdbc": {
+    "url": "jdbc:oracle:thin:@//PRBRMDBscan:1525/BRMDB",
+    "user": "ISCC_BIGDATA",
+    "password": "IsCbigData12p",
+    "driver": "oracle.jdbc.OracleDriver",
+    "fetchsize": 10000,
+    "dialect": "oracle",
+    "default_num_partitions": 8
+  },
   "metadata": {
     "enabled": true,
     "cache_path": "hdfs:///datalake/ingestion-fm/catalog/brm_dl",
-        "ttl_hours": 24,
-        "endpoint": {
-            "default": {},
-            "oracle": {}
-        },
-        "guardrails": {
-            "precision": {
-                "enabled": true,
-                "max_precision": 38,
-                "violation_action": "downcast",
-                "open_precision_action": "downcast",
-                "fallback_precision": 38,
-                "fallback_scale": 6
-            }
-        }
+    "ttl_hours": 24,
+    "endpoint": {
+      "default": {},
+      "oracle": {}
     },
-    "runtime": {
-        "job_name": "brm_dl",
-        "dynamicAllocation": false,
-        "initialExecutors": 2,
-        "raw_root": "hdfs:///datalake/ingestion-fm/raw/brm_dl",
-        "final_root": "hdfs:///datalake/ingestion-fm/final/brm_dl",
-        "timezone": "Asia/Kolkata",
-        "append_table_schema": false,
-        "max_parallel_tables": 4,
-        "write_format": "parquet",
-        "compression": "snappy",
-        "finalize_full_refresh": true,
-        "finalize_strategy": "copy_and_swap_final",
-        "hive": {
-            "enabled": true,
-            "db": "brm_dl_ing"
-        },
-        "logging": {
-            "level": "INFO",
-            "emit_structured": true,
-            "event_sink": "outbox",
-            "stacktrace": "hash"
-        },
-        "state_backend": "singlestore",
-        "state": {
-            "singlestore": {
-                "ddlEndpoint": "172.31.137.151:3306",
-                "user": "informatica",
-                "password": "infass!123",
-                "database": "monitoring2",
-                "eventsTable": "control_etl_events",
-                "watermarksTable": "control_watermarks",
-                "sourceId": "brm-spark-datalake"
-            }
-        },
-        "staging": {
-            "root": "hdfs:///datalake/ingestion-fm/staging/brm/_staging_slices",
-            "ttl_hours": 72,
-            "enabled": true
-        },
-        "scd1_slicing": {
-            "enabled": true,
-            "max_duration_hours": 168,
-            "max_count": 10000000,
-            "target_rows_per_slice": 1000000,
-            "max_partitions": 24
-        },
-        "intermediate": {
-            "enabled": true,
-            "type": "iceberg",
-            "_type_options": "iceberg | parquet",
-            "catalog": "ice",
-            "db": "staging",
-            "warehouse": "hdfs:///datalake/ingestion-fm/staging/brm/intermediate/iceberg"
-        },
-        "final_parquet_mirror": {
-            "enabled": true,
-            "root": "hdfs:///datalake/ingestion-fm/brm/final_parquet",
-            "partition_col": "load_date"
-        },
-        "hive_reg": {
-            "doc": "Used for SCD1 Final",
-            "enabled": true,
-            "db": "brm_dl_ing",
-            "partition_col": "load_date",
-            "use_msck": false
-        },
-        "log_file": "/home/informaticaadmin/etl_monitoring/brm_dl_ingest.log",
-        "state_flush_every": 50
+    "guardrails": {
+      "precision": {
+        "enabled": true,
+        "max_precision": 38,
+        "violation_action": "downcast",
+        "open_precision_action": "downcast",
+        "fallback_precision": 38,
+        "fallback_scale": 6
+      }
+    }
+  },
+  "runtime": {
+    "job_name": "brm_dl",
+    "dynamicAllocation": false,
+    "initialExecutors": 2,
+    "raw_root": "hdfs:///datalake/ingestion-fm/raw/brm_dl",
+    "final_root": "hdfs:///datalake/ingestion-fm/final/brm_dl",
+    "timezone": "Asia/Kolkata",
+    "append_table_schema": false,
+    "max_parallel_tables": 4,
+    "write_format": "parquet",
+    "compression": "snappy",
+    "finalize_full_refresh": true,
+    "finalize_strategy": "copy_and_swap_final",
+    "hive": {
+      "enabled": true,
+      "db": "brm_dl_ing"
     },
-    "tables": [
-        {
-            "schema": "PIN01",
-            "table": "account_aging_report_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "account_nameinfo_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "account_phones_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "account_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "bal_grp_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "bill_invoices_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "bill_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "billinfo_itc_nameinfo_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "billinfo_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "COLLECTION_REPORTS_T",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "config_customer_segment_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "deal_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_bal_impacts_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_misc_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_payment_cash_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_payment_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_pym_ext_off_cc_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_pym_ext_off_dc_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_pym_ext_offset_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_pym_ext_sadad_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_pymt_ext_cash_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_pymt_ext_check_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_pymt_ext_wtran_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_billing_reversal_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_item_transfer_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "event_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "group_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "item_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "payinfo_inv_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "payinfo_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "product_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "profile_itc_cust_info_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "profile_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "purchased_product_itc_info_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "purchased_product_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "rate_bal_impacts_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "rate_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "revenue_reports_view",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "service_itc_extended_info_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PIN01",
-            "table": "service_t",
-            "mode": "scd1",
-            "primary_keys": [
-                "POID_ID0"
-            ],
-            "incremental_column": "MOD_T",
-            "incr_col_type": "epoch_seconds",
-            "initial_watermark": "0"
-        },
-        {
-            "schema": "PIN01",
-            "table": "strings_t",
-            "mode": "full"
-        },
-        {
-            "schema": "PINBO",
-            "table": "all_zatca_invoices",
-            "mode": "full"
-        }
-    ]
+    "logging": {
+      "level": "INFO",
+      "emit_structured": true,
+      "event_sink": "outbox",
+      "stacktrace": "hash"
+    },
+    "state_backend": "singlestore",
+    "state": {
+      "singlestore": {
+        "ddlEndpoint": "172.31.137.151:3306",
+        "user": "informatica",
+        "password": "infass!123",
+        "database": "monitoring2",
+        "eventsTable": "control_etl_events",
+        "watermarksTable": "control_watermarks",
+        "sourceId": "brm-spark-datalake"
+      }
+    },
+    "staging": {
+      "root": "hdfs:///datalake/ingestion-fm/staging/brm/_staging_slices",
+      "ttl_hours": 72,
+      "enabled": true
+    },
+    "scd1_slicing": {
+      "enabled": true,
+      "max_duration_hours": 168,
+      "max_count": 10000000,
+      "target_rows_per_slice": 1000000,
+      "max_partitions": 24
+    },
+    "intermediate": {
+      "enabled": true,
+      "type": "iceberg",
+      "_type_options": "iceberg | parquet",
+      "catalog": "ice",
+      "db": "staging",
+      "warehouse": "hdfs:///datalake/ingestion-fm/staging/brm/intermediate/iceberg"
+    },
+    "final_parquet_mirror": {
+      "enabled": true,
+      "root": "hdfs:///datalake/ingestion-fm/brm/final_parquet",
+      "partition_col": "load_date"
+    },
+    "hive_reg": {
+      "doc": "Used for SCD1 Final",
+      "enabled": true,
+      "db": "brm_dl_ing",
+      "partition_col": "load_date",
+      "use_msck": false
+    },
+    "log_file": "/home/informaticaadmin/etl_monitoring/brm_dl_ingest.log",
+    "state_flush_every": 50
+  },
+  "tables": [
+    {
+      "schema": "PIN01",
+      "table": "account_aging_report_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "account_nameinfo_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "account_phones_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "account_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "bal_grp_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "bill_invoices_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "bill_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "billinfo_itc_nameinfo_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "billinfo_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "COLLECTION_REPORTS_T",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "config_customer_segment_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "deal_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_bal_impacts_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_misc_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_payment_cash_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_payment_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_pym_ext_off_cc_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_pym_ext_off_dc_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_pym_ext_offset_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_pym_ext_sadad_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_pymt_ext_cash_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_pymt_ext_check_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_pymt_ext_wtran_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_billing_reversal_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_item_transfer_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "event_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "group_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "item_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "payinfo_inv_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "payinfo_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "product_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "profile_itc_cust_info_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "profile_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "purchased_product_itc_info_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "purchased_product_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "rate_bal_impacts_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "rate_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "revenue_reports_view",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "service_itc_extended_info_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PIN01",
+      "table": "service_t",
+      "mode": "scd1",
+      "primary_keys": ["POID_ID0"],
+      "incremental_column": "MOD_T",
+      "incr_col_type": "epoch_seconds",
+      "initial_watermark": "0"
+    },
+    {
+      "schema": "PIN01",
+      "table": "strings_t",
+      "mode": "full"
+    },
+    {
+      "schema": "PINBO",
+      "table": "all_zatca_invoices",
+      "mode": "full"
+    }
+  ]
 }

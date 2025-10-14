@@ -45,3 +45,6 @@ class OracleEndpoint(JdbcEndpoint):
 
     def _cast_type_keyword(self) -> str:
         return "NUMBER"
+
+    def _string_cast_type(self) -> str:
+        return "VARCHAR2(4000)"

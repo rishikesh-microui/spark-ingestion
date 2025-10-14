@@ -76,11 +76,14 @@ class JsonFileMetadataRepository(MetadataRepository):
         entry = self.cache._index.get(key)  # type: ignore[attr-defined]
         if not entry:
             return None
-        path = os.path.join(self.cache.source_root, entry["path"])  # type: ignore[attr-defined]
-        if not os.path.exists(path):
+        path = self.cache._fs.join(self.cache.source_root, entry["path"])  # type: ignore[attr-defined]
+        if not self.cache._fs.exists(path):
             return None
-        with open(path, "r", encoding="utf-8") as handle:
-            return json.load(handle)
+        try:
+            data = self.cache._fs.read_text(path)
+            return json.loads(data)
+        except Exception as exc:  # pragma: no cover - defensive
+            return None
 
     def _list_history(self, target: MetadataTarget):
         directory = self.cache.artifact_dir(target)

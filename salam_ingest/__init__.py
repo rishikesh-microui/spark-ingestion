@@ -7,12 +7,11 @@ focused modules.
 """
 
 from .common import RUN_ID, next_event_seq, PrintLogger, with_ingest_cols
-from .orchestrator import ingest_one_table, main, run_cli, validate_config, suggest_singlestore_ddl
+from .orchestrator import main, run_cli, validate_config, suggest_singlestore_ddl
 
 __all__ = [
     "RUN_ID",
     "PrintLogger",
-    "ingest_one_table",
     "main",
     "next_event_seq",
     "run_cli",

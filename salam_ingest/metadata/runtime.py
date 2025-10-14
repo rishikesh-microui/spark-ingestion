@@ -5,7 +5,6 @@ from typing import Any, Dict, List, Optional
 
 from salam_ingest.common import PrintLogger
 from salam_ingest.events import emit_log
-from salam_ingest.endpoints import EndpointFactory
 from salam_ingest.endpoints.base import MetadataCapableEndpoint
 from salam_ingest.metadata.cache import MetadataCacheConfig, MetadataCacheManager
 from salam_ingest.metadata.core import JsonFileMetadataRepository, MetadataTarget
@@ -55,6 +54,9 @@ def collect_metadata(
     logger: PrintLogger,
 ) -> None:
     """Collect metadata snapshots for the provided tables using their endpoints."""
+
+    # Imported lazily to avoid circular dependency during module import
+    from salam_ingest.endpoints.factory import EndpointFactory
 
     spark = getattr(tool, "spark", None) if tool is not None else SparkSession.getActiveSession()
     service_cfg, cache_manager, default_namespace = _build_metadata_configs(cfg, logger, spark)

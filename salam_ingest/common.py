@@ -62,10 +62,19 @@ class PrintLogger:
     def error(self, msg: str, **kv: Any) -> None:
         self.log("ERROR", msg, **kv)
 
-    def event(self, event: str, level: str = "INFO", **kv: Any) -> None:
+    def event(self, event_type: str, level: str = "INFO", **kv: Any) -> None:
+        """
+        Log a structured event. Accepts the event name either positionally (name)
+        or via kwargs as 'event'. Ensures the structured field 'event' matches.
+        """
+        #event type ==> msg for logging
+        #level is level which log api takes. 
+        ## therefore we need to name msg as messages. 
         kv = dict(kv)
-        kv.setdefault("event", event)
-        self.log(level, event, **kv)
+        if "msg" in kv:
+            kv["message"] = kv.pop("msg") 
+        kv.setdefault("event", event_type)
+        self.log(level, event_type, **kv)
 
 
 def with_ingest_cols(df: DataFrame) -> DataFrame:

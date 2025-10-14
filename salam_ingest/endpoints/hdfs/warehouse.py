@@ -179,7 +179,9 @@ class IcebergHelper:
 
     @staticmethod
     def _identifier(schema: str, table: str) -> str:
-        return f"{schema}__{table}"
+        normalized_schema = (schema or "").strip().lower()
+        normalized_table = (table or "").strip().lower()
+        return f"{normalized_schema}__{normalized_table}"
 
     @staticmethod
     def setup_catalog(spark: SparkSession, cfg: Dict[str, Any]) -> None:

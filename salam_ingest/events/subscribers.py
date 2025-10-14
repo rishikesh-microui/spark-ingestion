@@ -38,10 +38,13 @@ class StructuredLogSubscriber(Subscriber):
             "category": event.category.value,
             "job": self.job_name,
             "run_id": RUN_ID,
+            "level": "INFO",
             **event.payload,
         }
+        level = record["level"] or "INFO"
+        record.pop("level")
         if self.emit_structured:
-            self.logger.event(event.type.value, level="INFO", **record)
+            self.logger.event(event.type.value, level=level, **record)
         else:
             self.logger.info(event.type.value, **record)
         if self.outbox and self.event_sink in {"outbox", "both"}:

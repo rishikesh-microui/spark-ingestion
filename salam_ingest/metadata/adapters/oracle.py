@@ -261,18 +261,18 @@ class OracleMetadataSubsystem(MetadataSubsystem):
     def _columns_sql(self, schema: str, table: str) -> str:
         return f"""
         SELECT
-            OWNER AS schema_name,
-            TABLE_NAME,
-            COLUMN_NAME,
-            DATA_TYPE,
-            DATA_LENGTH,
-            DATA_PRECISION,
-            DATA_SCALE,
-            NULLABLE,
-            DATA_DEFAULT,
-            COLUMN_ID,
-            CHAR_LENGTH,
-            CHAR_USED
+            OWNER AS "schema_name",
+            TABLE_NAME AS "table_name",
+            COLUMN_NAME AS "column_name",
+            DATA_TYPE AS "data_type",
+            DATA_LENGTH AS "data_length",
+            DATA_PRECISION AS "data_precision",
+            DATA_SCALE AS "data_scale",
+            NULLABLE AS "nullable",
+            DATA_DEFAULT AS "data_default",
+            COLUMN_ID AS "column_id",
+            CHAR_LENGTH AS "char_length",
+            CHAR_USED AS "char_used"
         FROM ALL_TAB_COLUMNS
         WHERE OWNER = '{escape_literal(schema)}'
           AND TABLE_NAME = '{escape_literal(table)}'
@@ -282,18 +282,18 @@ class OracleMetadataSubsystem(MetadataSubsystem):
     def _table_stats_sql(self, schema: str, table: str) -> str:
         return f"""
         SELECT
-            OWNER AS schema_name,
-            TABLE_NAME,
-            NUM_ROWS,
-            BLOCKS,
-            AVG_ROW_LEN,
-            SAMPLE_SIZE,
-            LAST_ANALYZED,
-            STALE_STATS,
-            GLOBAL_STATS,
-            USER_STATS,
-            TEMPORARY,
-            PARTITIONED
+            OWNER AS "schema_name",
+            TABLE_NAME AS "table_name",
+            NUM_ROWS AS "num_rows",
+            BLOCKS AS "blocks",
+            AVG_ROW_LEN AS "avg_row_len",
+            SAMPLE_SIZE AS "sample_size",
+            LAST_ANALYZED AS "last_analyzed",
+            STALE_STATS AS "stale_stats",
+            GLOBAL_STATS AS "global_stats",
+            USER_STATS AS "user_stats",
+            'FALSE' AS "temporary",
+            PARTITION_NAME AS "partitioned"
         FROM ALL_TAB_STATISTICS
         WHERE OWNER = '{escape_literal(schema)}'
           AND TABLE_NAME = '{escape_literal(table)}'
@@ -302,38 +302,82 @@ class OracleMetadataSubsystem(MetadataSubsystem):
     def _column_stats_sql(self, schema: str, table: str) -> str:
         return f"""
         SELECT
-            OWNER AS schema_name,
-            TABLE_NAME,
-            COLUMN_NAME,
-            NUM_DISTINCT,
-            NUM_NULLS,
-            DENSITY,
-            AVG_COL_LEN,
-            SAMPLE_SIZE,
-            HISTOGRAM,
-            LAST_ANALYZED
-        FROM ALL_TAB_COL_STATISTICS
-        WHERE OWNER = '{escape_literal(schema)}'
-          AND TABLE_NAME = '{escape_literal(table)}'
-        ORDER BY COLUMN_NAME
+            s.OWNER AS "schema_name",
+            s.TABLE_NAME AS "table_name",
+            s.COLUMN_NAME AS "column_name",
+            s.NUM_DISTINCT AS "num_distinct",
+            s.NUM_NULLS AS "num_nulls",
+            s.DENSITY AS "density",
+            s.AVG_COL_LEN AS "avg_col_len",
+            s.SAMPLE_SIZE AS "sample_size",
+            s.HISTOGRAM AS "histogram",
+            s.LAST_ANALYZED AS "last_analyzed",
+            CASE
+                WHEN c.DATA_TYPE IN ('NUMBER', 'DECIMAL', 'NUMERIC', 'FLOAT') AND s.LOW_VALUE IS NOT NULL THEN
+                    TO_CHAR(UTL_RAW.CAST_TO_NUMBER(s.LOW_VALUE))
+                ELSE NULL
+            END AS "low_value",
+            CASE
+                WHEN c.DATA_TYPE IN ('NUMBER', 'DECIMAL', 'NUMERIC', 'FLOAT') AND s.HIGH_VALUE IS NOT NULL THEN
+                    TO_CHAR(UTL_RAW.CAST_TO_NUMBER(s.HIGH_VALUE))
+                ELSE NULL
+            END AS "high_value",
+            CASE
+                WHEN c.DATA_TYPE IN ('NUMBER', 'DECIMAL', 'NUMERIC', 'FLOAT') AND s.LOW_VALUE IS NOT NULL THEN
+                    LENGTH(
+                        REPLACE(
+                            REGEXP_REPLACE(
+                            TO_CHAR(UTL_RAW.CAST_TO_NUMBER(s.LOW_VALUE)),
+                            '[^0-9]', ''  -- keep only digits, remove signs/decimal/E
+                            ),
+                            '0', '0'  -- dummy REPLACE to ensure null-safe length()
+                        )
+                    )
+		  				 + 
+		  			 TO_NUMBER(REGEXP_SUBSTR(TO_CHAR(UTL_RAW.CAST_TO_NUMBER(s.LOW_VALUE)), 'E\+([0-9]+)', 1, 1, NULL, 1))
+                ELSE NULL
+            END AS "low_value_length",
+            CASE
+                WHEN c.DATA_TYPE IN ('NUMBER', 'DECIMAL', 'NUMERIC', 'FLOAT') AND s.HIGH_VALUE IS NOT NULL THEN
+                   LENGTH(
+                        REPLACE(
+                            REGEXP_REPLACE(
+                            TO_CHAR(UTL_RAW.CAST_TO_NUMBER(s.HIGH_VALUE)),
+                            '[^0-9]', ''  -- keep only digits, remove signs/decimal/E
+                            ),
+                            '0', '0'  -- dummy REPLACE to ensure null-safe length()
+                        )
+                    )
+		  				 + 
+		  			 TO_NUMBER(REGEXP_SUBSTR(TO_CHAR(UTL_RAW.CAST_TO_NUMBER(s.HIGH_VALUE)), 'E\+([0-9]+)', 1, 1, NULL, 1))
+                ELSE NULL
+            END AS "high_value_length"
+        FROM ALL_TAB_COL_STATISTICS s
+        JOIN ALL_TAB_COLUMNS c
+          ON c.OWNER = s.OWNER
+         AND c.TABLE_NAME = s.TABLE_NAME
+         AND c.COLUMN_NAME = s.COLUMN_NAME
+        WHERE s.OWNER = '{escape_literal(schema)}'
+          AND s.TABLE_NAME = '{escape_literal(table)}'
+        ORDER BY s.COLUMN_NAME
         """
 
     def _comments_sql(self, schema: str, table: str) -> Any:
         table_sql = f"""
         SELECT
-            OWNER AS schema_name,
-            TABLE_NAME,
-            COMMENTS
+            OWNER AS "schema_name",
+            TABLE_NAME as "table_name",
+            COMMENTS as "comments"
         FROM ALL_TAB_COMMENTS
         WHERE OWNER = '{escape_literal(schema)}'
           AND TABLE_NAME = '{escape_literal(table)}'
         """
         column_sql = f"""
         SELECT
-            OWNER AS schema_name,
-            TABLE_NAME,
-            COLUMN_NAME,
-            COMMENTS
+            OWNER AS "schema_name",
+            TABLE_NAME as "table_name",
+            COLUMN_NAME as "column_name",
+            COMMENTS as "comments"
         FROM ALL_COL_COMMENTS
         WHERE OWNER = '{escape_literal(schema)}'
           AND TABLE_NAME = '{escape_literal(table)}'
@@ -343,17 +387,17 @@ class OracleMetadataSubsystem(MetadataSubsystem):
     def _constraints_sql(self, schema: str, table: str) -> str:
         return f"""
         SELECT
-            ac.CONSTRAINT_NAME,
-            ac.CONSTRAINT_TYPE,
-            ac.STATUS,
-            ac.DEFERRABLE,
-            ac.DEFERRED,
-            ac.VALIDATED,
-            ac.GENERATED,
-            acc.COLUMN_NAME,
-            acc.POSITION,
-            ac.R_CONSTRAINT_NAME,
-            ac.DELETE_RULE
+            ac.CONSTRAINT_NAME AS "constraint_name",
+            ac.CONSTRAINT_TYPE AS "constraint_type",
+            ac.STATUS AS "status",
+            ac.DEFERRABLE AS "deferrable",
+            ac.DEFERRED AS "deferred",
+            ac.VALIDATED AS "validated",
+            ac.GENERATED AS "generated",
+            acc.COLUMN_NAME AS "column_name",
+            acc.POSITION AS "position",
+            ac.R_CONSTRAINT_NAME AS "r_constraint_name",
+            ac.DELETE_RULE AS "delete_rule"
         FROM ALL_CONSTRAINTS ac
         JOIN ALL_CONS_COLUMNS acc
           ON ac.OWNER = acc.OWNER

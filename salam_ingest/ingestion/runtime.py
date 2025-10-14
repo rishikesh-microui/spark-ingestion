@@ -7,7 +7,6 @@ import traceback
 from typing import Any, Dict, List, Tuple
 
 from salam_ingest.common import PrintLogger, RUN_ID
-from salam_ingest.endpoints import EndpointFactory
 from salam_ingest.events import Event, EventCategory, EventType, emit_log
 from salam_ingest.planning import AdaptivePlanner, PlannerRequest
 from salam_ingest.planning.base import REGISTRY as PLANNER_REGISTRY
@@ -24,6 +23,7 @@ def _ingest_one_table(
     load_date: str,
 ) -> Dict[str, Any]:
     _ = AdaptivePlanner  # noqa: F841  (import side-effects)
+    from salam_ingest.endpoints.factory import EndpointFactory  # local import to avoid circular dependency
 
     schema, table = tbl["schema"], tbl["table"]
     mode = tbl.get("mode", "full").lower()

@@ -143,6 +143,10 @@ class OracleMetadataNormalizer(MetadataNormalizer):
                 average_length=_safe_float(row.get("avg_col_len")),
                 histogram=self._histogram(row),
                 last_analyzed=_safe_ts(row.get("last_analyzed")),
+                min_value=row.get("low_value"),
+                max_value=row.get("high_value"),
+                min_value_length=_safe_int(row.get("low_value_length")),
+                max_value_length=_safe_int(row.get("high_value_length")),
                 extras={k: v for k, v in row.items() if k not in _ORACLE_COLUMN_STAT_KEYS},
             )
         return lookup
@@ -261,6 +265,10 @@ _ORACLE_COLUMN_STAT_KEYS = {
     "sample_size",
     "histogram",
     "last_analyzed",
+    "low_value",
+    "high_value",
+    "low_value_length",
+    "high_value_length",
 }
 
 _ORACLE_DATASET_STAT_KEYS = {

@@ -1,7 +1,6 @@
 from salam_ingest import (
     RUN_ID,
     PrintLogger,
-    ingest_one_table,
     main,
     run_cli,
     suggest_singlestore_ddl,
@@ -12,7 +11,6 @@ from salam_ingest import (
 __all__ = [
     "RUN_ID",
     "PrintLogger",
-    "ingest_one_table",
     "main",
     "run_cli",
     "suggest_singlestore_ddl",

@@ -52,6 +52,10 @@ class SchemaFieldStatistics:
     average_length: Optional[float] = None
     histogram: Optional[Dict[str, Any]] = None
     last_analyzed: Optional[str] = None
+    min_value: Optional[Any] = None
+    max_value: Optional[Any] = None
+    min_value_length: Optional[int] = None
+    max_value_length: Optional[int] = None
     extras: Dict[str, Any] = field(default_factory=dict)
 
 

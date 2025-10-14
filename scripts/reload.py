@@ -15,7 +15,9 @@ def reload_package(pkg_name: str):
 
 reload_package("ingestion")
 reload_package("salam_ingest")
-ingestion.run_cli(["--config", "/home/informaticaadmin/rishikesh/conf/brm.json"])
+ingestion.run_cli(["--config", "/home/informaticaadmin/rishikesh/sparkingestion/conf/brm.json"])
 
 import ingestion
-ingestion.run_cli(["--config", "/home/informaticaadmin/rishikesh/conf/brm.json"])
+ingestion.run_cli(["--config", "/home/informaticaadmin/rishikesh/sparkingestion/conf/brm.json"])
+
+PYTHONPATH=/home/informaticaadmin/rishikesh/sparkingestion pyspark3  --jars /home/informaticaadmin/jars/singlestore-spark-connector_2.12-4.1.10-spark-3.3.4.jar,/home/informaticaadmin/jars/mariadb-java-client-2.7.11.jar,/home/informaticaadmin/jars/spray-json_2.13-1.3.5.jar,/home/informaticaadmin/jars/ojdbc8-12.2.0.1.jar,/home/informaticaadmin/jars/singlestore-jdbc-client-1.1.8.jar,/home/informaticaadmin/jars/mssql-jdbc-13.2.0.jre8.jar,/home/informaticaadmin/jars/spark-mssql-connector_2.12-1.2.0.jar --conf spark.scheduler.mode=FAIR --conf spark.dynamicAllocation.enabled=false --conf spark.dynamicAllocation.initialExecutors=2 --conf spark.executor.cores=4

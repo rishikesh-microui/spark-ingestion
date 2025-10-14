@@ -247,8 +247,17 @@ class JdbcEndpoint(SourceEndpoint):
         key = column.upper()
         spec = cast_specs.get(key)
         identifier = self._column_identifier(column)
-        if spec and getattr(spec, "precision", None):
-            return self._cast_expression(identifier, column, spec)
+        if spec:
+            target_type = getattr(spec, "target_type", None)
+            if target_type is None and isinstance(spec, dict):
+                target_type = spec.get("target_type")
+            if target_type and str(target_type).lower() == "string":
+                return self._cast_to_string(identifier, column, spec)
+            precision_value = getattr(spec, "precision", None)
+            if precision_value is None and isinstance(spec, dict):
+                precision_value = spec.get("precision")
+            if precision_value is not None:
+                return self._cast_expression(identifier, column, spec)
         return identifier
 
     def _column_identifier(self, column: str) -> str:
@@ -260,6 +269,10 @@ class JdbcEndpoint(SourceEndpoint):
     def _cast_expression(self, identifier: str, column: str, spec) -> str:
         precision = getattr(spec, "precision", None)
         scale = getattr(spec, "scale", None)
+        if precision is None and isinstance(spec, dict):
+            precision = spec.get("precision")
+        if scale is None and isinstance(spec, dict):
+            scale = spec.get("scale")
         if precision is None:
             return identifier
         type_keyword = self._cast_type_keyword()
@@ -269,6 +282,13 @@ class JdbcEndpoint(SourceEndpoint):
 
     def _cast_type_keyword(self) -> str:
         return "DECIMAL"
+
+    def _cast_to_string(self, identifier: str, column: str, spec) -> str:
+        alias = self._column_alias(column)
+        return f"CAST({identifier} AS {self._string_cast_type()}) AS {alias}"
+
+    def _string_cast_type(self) -> str:
+        return "VARCHAR(4000)"
 
     def _literal(self, value: str) -> str:
         return f"'{value}'"

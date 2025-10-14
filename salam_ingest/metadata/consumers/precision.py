@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, is_dataclass
-from typing import Any, Dict, Iterable, List, Optional
+from decimal import Decimal, InvalidOperation
+from typing import Any, Dict, List, Optional, Tuple
 
 from ..core import MetadataTarget
 from ..core.interfaces import MetadataRepository
@@ -12,6 +13,7 @@ class PrecisionSpec:
     column: str
     precision: Optional[int]
     scale: Optional[int]
+    target_type: str = "numeric"
 
 
 @dataclass
@@ -46,7 +48,7 @@ class PrecisionGuardrailEvaluator:
     """Evaluate numeric precision risks based on catalog metadata."""
 
     DEFAULT_MAX_PRECISION = 38
-    NUMERIC_TYPES = {"NUMBER", "DECIMAL", "NUMERIC"}
+    NUMERIC_TYPES = {"NUMBER", "DECIMAL", "NUMERIC", "FLOAT"}
 
     def __init__(self, repository: MetadataRepository, *, max_precision: Optional[int] = None) -> None:
         self.repository = repository
@@ -81,13 +83,9 @@ class PrecisionGuardrailEvaluator:
                 snapshot=None,
             )
         fields = self._schema_fields(snapshot)
-        effective_max = max_precision or self.max_precision
-        fallback_precision = fallback_precision or effective_max
-        if fallback_precision is None:
-            fallback_precision = self.DEFAULT_MAX_PRECISION
-        if effective_max is not None:
-            fallback_precision = min(fallback_precision, effective_max)
-        effective_scale_default = fallback_scale if fallback_scale is not None else min(6, fallback_precision)
+        configured_max = max_precision if max_precision is not None else self.max_precision
+        precision_limit = configured_max if configured_max is not None else self.DEFAULT_MAX_PRECISION
+        length_limit = precision_limit
         violation_action = (violation_action or "downcast").lower()
         open_precision_action = (open_precision_action or violation_action).lower()
         issues: List[PrecisionIssue] = []
@@ -103,6 +101,90 @@ class PrecisionGuardrailEvaluator:
             precision = _to_int(field.get("precision") or field.get("data_precision"))
             scale = _to_int(field.get("scale") or field.get("data_scale"))
             key = name.upper()
+            stats_obj = field.get("statistics")
+            if stats_obj and not isinstance(stats_obj, dict):
+                if is_dataclass(stats_obj):
+                    stats_obj = asdict(stats_obj)
+                else:
+                    stats_obj = {
+                        attr: getattr(stats_obj, attr)
+                        for attr in dir(stats_obj)
+                        if not attr.startswith("_") and not callable(getattr(stats_obj, attr))
+                    }
+            observed_length, observed_sample = _max_observed_numeric_length(stats_obj)
+            limit_for_precision = precision_limit
+            if limit_for_precision is None:
+                limit_for_precision = self.DEFAULT_MAX_PRECISION
+            precision_limit_exceeded = precision is not None and precision > limit_for_precision
+            observed_limit_exceeded = (
+                observed_length is not None
+                and length_limit is not None
+                and observed_length > length_limit
+            )
+            if precision_limit_exceeded:
+                limit_display = limit_for_precision
+                if violation_action == "fail":
+                    issues.append(
+                        PrecisionIssue(
+                            column=name,
+                            precision=precision,
+                            scale=scale,
+                            reason=f"precision {precision} exceeds maximum {limit_display}",
+                            handled=False,
+                            action="fail",
+                        )
+                    )
+                    fatal = True
+                    continue
+            if observed_limit_exceeded:
+                limit_display = length_limit
+                sample_suffix = ""
+                if observed_sample:
+                    sample_display = observed_sample if len(observed_sample) <= 64 else f"{observed_sample[:61]}..."
+                    sample_suffix = f"; sample {sample_display}"
+                if violation_action == "fail":
+                    issues.append(
+                        PrecisionIssue(
+                            column=name,
+                            precision=precision,
+                            scale=scale,
+                            reason=(
+                                f"observed numeric magnitude requires {observed_length} digits, "
+                                f"exceeds maximum {limit_display}{sample_suffix}"
+                            ),
+                            handled=False,
+                            action="fail",
+                        )
+                    )
+                    fatal = True
+                    continue
+            if precision_limit_exceeded or observed_limit_exceeded:
+                reason_parts: List[str] = []
+                if precision_limit_exceeded:
+                    limit_display = limit_for_precision
+                    reason_parts.append(f"precision {precision} exceeds maximum {limit_display}")
+                if observed_limit_exceeded:
+                    limit_display = length_limit
+                    sample_suffix = ""
+                    if observed_sample:
+                        sample_display = observed_sample if len(observed_sample) <= 64 else f"{observed_sample[:61]}..."
+                        sample_suffix = f"; sample {sample_display}"
+                    reason_parts.append(
+                        f"observed numeric magnitude requires {observed_length} digits, exceeds maximum {limit_display}{sample_suffix}"
+                    )
+                reason = "; ".join(reason_parts)
+                cast_specs[key] = PrecisionSpec(column=name, precision=None, scale=None, target_type="string")
+                issues.append(
+                    PrecisionIssue(
+                        column=name,
+                        precision=None,
+                        scale=None,
+                        reason=reason,
+                        handled=True,
+                        action="cast_to_string",
+                    )
+                )
+                continue
             if precision is None:
                 if open_precision_action == "fail":
                     issues.append(
@@ -116,62 +198,7 @@ class PrecisionGuardrailEvaluator:
                         )
                     )
                     fatal = True
-                    continue
-                adj_precision = fallback_precision
-                adj_scale = _choose_scale(scale, adj_precision, effective_scale_default)
-                cast_specs[key] = PrecisionSpec(column=name, precision=adj_precision, scale=adj_scale)
-                issues.append(
-                    PrecisionIssue(
-                        column=name,
-                        precision=adj_precision,
-                        scale=adj_scale,
-                        reason=f"precision undefined; downcast to {adj_precision},{adj_scale}",
-                        handled=True,
-                        action="downcast",
-                    )
-                )
                 continue
-            if precision > effective_max:
-                if violation_action == "fail":
-                    issues.append(
-                        PrecisionIssue(
-                            column=name,
-                            precision=precision,
-                            scale=scale,
-                            reason=f"precision {precision} exceeds maximum {effective_max}",
-                            handled=False,
-                            action="fail",
-                        )
-                    )
-                    fatal = True
-                    continue
-                adj_precision = effective_max
-                adj_scale = _choose_scale(scale, adj_precision, effective_scale_default)
-                cast_specs[key] = PrecisionSpec(column=name, precision=adj_precision, scale=adj_scale)
-                issues.append(
-                    PrecisionIssue(
-                        column=name,
-                        precision=adj_precision,
-                        scale=adj_scale,
-                        reason=f"precision {precision} exceeds maximum {effective_max}; downcast to {adj_precision},{adj_scale}",
-                        handled=True,
-                        action="downcast",
-                    )
-                )
-                continue
-            if scale is not None and scale > precision:
-                adj_scale = _choose_scale(scale, precision, effective_scale_default)
-                cast_specs[key] = PrecisionSpec(column=name, precision=precision, scale=adj_scale)
-                issues.append(
-                    PrecisionIssue(
-                        column=name,
-                        precision=precision,
-                        scale=adj_scale,
-                        reason=f"scale {scale} clipped to {adj_scale} to fit precision {precision}",
-                        handled=True,
-                        action="clip_scale",
-                    )
-                )
         if fatal:
             status = "fatal"
         elif issues:
@@ -219,11 +246,68 @@ def _to_int(value: Any) -> Optional[int]:
             return None
 
 
-def _choose_scale(scale: Optional[int], precision: Optional[int], default_scale: int) -> int:
-    if precision is None or precision <= 0:
-        precision = PrecisionGuardrailEvaluator.DEFAULT_MAX_PRECISION
-    if scale is None:
-        scale = min(default_scale, precision)
+def _normalize_numeric_string(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, Decimal):
+        text = format(value, "f")
+    elif isinstance(value, int):
+        text = str(value)
+    elif isinstance(value, float):
+        try:
+            text = format(Decimal(str(value)), "f")
+        except (InvalidOperation, ValueError):
+            text = str(value)
     else:
-        scale = max(0, min(scale, precision))
-    return scale
+        text = str(value).strip()
+        if not text:
+            return None
+        normalized_candidate = text.replace("d", "e").replace("D", "E")
+        if "E" in normalized_candidate:
+            try:
+                text = format(Decimal(normalized_candidate), "f")
+            except (InvalidOperation, ValueError):
+                text = normalized_candidate
+    text = text.strip()
+    return text or None
+
+
+def _max_observed_numeric_length(stats: Optional[Dict[str, Any]]) -> Tuple[Optional[int], Optional[str]]:
+    if not isinstance(stats, dict):
+        return None, None
+    max_length: Optional[int] = None
+    sample: Optional[str] = None
+
+    def update(length: Optional[int], candidate: Optional[str] = None) -> None:
+        nonlocal max_length, sample
+        if length is None:
+            return
+        if max_length is None or length > max_length:
+            max_length = length
+            sample = candidate
+        elif candidate is not None and length == max_length and sample is None:
+            sample = candidate
+
+    def consider(value: Any) -> None:
+        normalized = _normalize_numeric_string(value)
+        if not normalized:
+            return
+        digits = sum(1 for ch in normalized if ch.isdigit())
+        update(digits, normalized)
+
+    for key in ("max_value", "high_value", "maximum", "max"):
+        consider(stats.get(key))
+    for key in ("min_value", "low_value", "minimum", "min"):
+        consider(stats.get(key))
+    for key in ("max_value_length", "high_value_length", "min_value_length", "low_value_length"):
+        update(_to_int(stats.get(key)))
+
+    extras = stats.get("extras")
+    if isinstance(extras, dict):
+        for key in ("max_value", "high_value", "maximum", "max", "min_value", "low_value", "minimum", "min"):
+            if key in extras:
+                consider(extras.get(key))
+        for key in ("max_value_length", "high_value_length", "min_value_length", "low_value_length"):
+            update(_to_int(extras.get(key)))
+
+    return max_length, sample
